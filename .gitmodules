@@ -1,0 +1,3 @@
+[submodule "TutorialPlugin"]
+	path = TutorialPlugin
+	url = https://github.com/Otakubuns/GrandBazaarTutorialPlugin
