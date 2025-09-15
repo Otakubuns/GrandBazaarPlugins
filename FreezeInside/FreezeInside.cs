@@ -40,18 +40,6 @@ public class FreezeInside : BasePlugin
             SingletonMonoBehaviour<DateManager>.Instance.TimeScale =
                 MasterDataManager.Instance.FieldMaster.GetData(fieldId).IsInDoor ? 0 : 60;
         }
-        
-        [HarmonyPatch(typeof(UITitleMainPage), "PlayTitleLogoAnimation")]
-        [HarmonyPostfix]
-        private static void OnPlayTitleLogoAnimation()
-        {
-            MasterDataManager.Instance.DropMaster.
-            
-            foreach (var itemMasterData in MasterDataManager.Instance.ItemMasterData)
-            {
-                if(itemMasterData.StackSize != 1) itemMasterData.StackSize = 999;
-            }
-        }
 
         [HarmonyPatch(typeof(DateManager), "OnStartGame")]
         [HarmonyPostfix]
