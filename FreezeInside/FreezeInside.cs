@@ -15,12 +15,12 @@ public class FreezeInside : BasePlugin
 {
     internal static new ManualLogSource Log;
     private static ConfigEntry<float> _timeScaleValue;
-    private static ConfigEntry<bool> _freezeInside;
+    private static ConfigEntry<float> _timeInsideValue;
 
     public override void Load()
     {
         _timeScaleValue = Config.Bind("General", "Time Scale", 60.0f, "Set the time scale of the game(default is a second per in-game minute). Game default is 60.0.");
-        _freezeInside = Config.Bind("General", "Freeze Inside", true, "Set to true to freeze time when indoors.");
+        _timeInsideValue = Config.Bind("General", "Inside Time Scale", 0f, "Sets the time scale while inside buildings. 0 to freeze time, 60 to keep normal speed.");
         Log = base.Log;
         Log.LogInfo($"Plugin {MyPluginInfo.PLUGIN_GUID} is loaded!");
         Harmony.CreateAndPatchAll(typeof(TimeFreezePatch));
@@ -63,7 +63,7 @@ public class FreezeInside : BasePlugin
          */
         private static void UpdateTimeScale(bool isIndoors)
         {
-            SingletonMonoBehaviour<DateManager>.Instance.TimeScale = _freezeInside.Value && isIndoors ? 0 : _timeScaleValue.Value;
+            SingletonMonoBehaviour<DateManager>.Instance.TimeScale = isIndoors ? _timeInsideValue.Value : _timeScaleValue.Value;
         }
     }
 }
