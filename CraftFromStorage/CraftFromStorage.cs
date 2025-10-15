@@ -31,7 +31,6 @@ public class CraftFromStorage : BasePlugin
 
     private class CraftingPatch
     {
-        
         private static bool _hasPatched;
 
         /*
@@ -52,8 +51,8 @@ public class CraftFromStorage : BasePlugin
             if (backgroundImage == null) return;
 
             var groupGameObject = backgroundImage.transform.GetChild(1).gameObject;
-            
-            if(groupGameObject == null) return;
+
+            if (groupGameObject == null) return;
 
             var rectangle = backgroundImage.GetComponent<RectTransform>();
             rectangle.sizeDelta = new Vector2(rectangle.sizeDelta.x, rectangle.sizeDelta.y + 90);
@@ -81,80 +80,95 @@ public class CraftFromStorage : BasePlugin
 
             _hasPatched = true;
         }
-
+        
         /*
-         * This patch is to update the greyed out recipe icons if they are craftable from storage
+         * This patch makes the recipe icons to be craftable if the items are in storage
+         * Does not allow crafting from storage yet, just makes the icon highlighted and clickable
          */
-        [HarmonyPatch(typeof(UIRecipeIconContent), "UpdateContentUniqueData")]
+        [HarmonyPatch(typeof(RequiredItemMaster), nameof(RequiredItemMaster.IsEnough))]
         [HarmonyPostfix]
-        private static void OnRecipeIconUpdate(UIRecipeIconContent __instance, UIData __0)
+        public static void PatchRecipeMask(BokuMono.StorageManager __0,
+            BokuMono.Data.IRequiredItemMasterData __1,
+            int countOffset, ref bool __result)
         {
-            if (__instance == null || __instance.cacheData == null) return;
-            
-            // is in a try as some reason it will throw an error sometimes and i don't know exactly why so 
-            try
-            {
-                if (__instance.cacheData.RecipeType != RecipeMasterType.Windmill) return;
-            }
-            catch (Exception e)
-            {
-                _hasPatched = false;
-                return;
-            }
+            if (__result) return; // if already true no real need to check
 
-            var storage = ManagedSingleton<InventoryManager>.Instance.HouseStorage;
-            var bag = ManagedSingleton<InventoryManager>.Instance.BagItemStorage;
-
-            if (storage == null || bag == null)
-            {
-                return;
-            }
-
-            // gonna need to have amountNeeded taken from storage when crafting
-            __instance.mask.enabled = !IsCraftable(__instance.cacheData.WindmillCraftData.requiredItemList);
+            __result = IsCraftable(__1);
         }
 
         /*
          * This function will check if a recipe is craftable from storage and bag
+         * @param itemMasterData - the recipe to check(holds ingredient info only, not the recipe info)
          * returns true if it is
          */
-        private static bool IsCraftable(List<Il2CppSystem.ValueTuple<uint, int, int, int>> ingredientList)
+        private static bool IsCraftable(IRequiredItemMasterData itemMasterData)
         {
             var inventoryManager = ManagedSingleton<InventoryManager>.Instance;
-            if (inventoryManager == null) return false;
-            var isCraftable = true;
-            // this loop into each ingredient needed for the recipe
-            foreach (var tuple in ingredientList)
-            {
-                // since it is boxed i am just going to cut up the tostring as im just looking for the itemid and stack
-                // and also i dont know how to unbox it properly
-                var itemString = tuple.ToString();
-                var split = itemString.Split(',');
-                var itemId = uint.Parse(split[0].Trim('(', ' '));
-                var stack = int.Parse(split[1].Trim(' ', ')'));
-                var amountNeeded = stack;
 
+            for (int i = 0; i < itemMasterData.RequiredItemCount; i++)
+            {
+                var itemData = itemMasterData.RequiredItemList._items[i].ToString().Split(',');
+                var itemId = uint.Parse(itemData[0].Trim('(', ' '));
+                var stack = int.Parse(itemData[1].Trim(' ', ')'));
+                var category = itemMasterData.RequiredItemTypeList._items[i];
 
                 if (itemId == 0 || stack == 0) continue;
 
-                var bagStorage = inventoryManager.BagItemStorage.itemDatas
-                    .Where(x => x.ItemId == itemId).Sum(x => x.Stack);
-                var houseStorage = inventoryManager.HouseStorage.itemDatas
-                    .Where(x => x.ItemId == itemId).Sum(x => x.Stack);
-                var toolStorage = inventoryManager.BagToolStorage.itemDatas
-                    .Where(x => x.ItemId == itemId).Sum(x => x.Stack);
+                int CountInAllStorages(Func<ItemData, bool> predicate)
+                {
+                    return inventoryManager.BagItemStorage.itemDatas
+                               .Where(predicate).Sum(x => x.Stack)
+                           + inventoryManager.HouseStorage.itemDatas
+                               .Where(predicate).Sum(x => x.Stack)
+                           + inventoryManager.BagToolStorage.itemDatas
+                               .Where(predicate).Sum(x => x.Stack);
+                }
 
-                amountNeeded -= bagStorage + toolStorage;
-                if (amountNeeded > 0) amountNeeded -= houseStorage;
+                switch (category)
+                {
+                    case RequiredItemType.Item:
+                        var totalAmount = CountInAllStorages(x =>
+                            x.ItemId == itemId);
 
+                        if (totalAmount < stack)
+                        {
+                            return false;
+                        }
 
-                if (amountNeeded <= 0) continue;
+                        break;
 
-                isCraftable = false;
-                break;
+                    case RequiredItemType.Category:
+                        var totalCategoryAmount = CountInAllStorages(x =>
+                            x.Category == itemId);
+
+                        if (totalCategoryAmount < stack)
+                        {
+                            return false;
+                        }
+
+                        break;
+
+                    case RequiredItemType.Group:
+                        if (!itemMasterData.GroupMaster.TryGetGroupData(itemId, out var groupData) ||
+                            groupData == null) continue;
+
+                        foreach (var requiredItem in groupData.RequiredItemIdList)
+                        {
+                            if (requiredItem == 0) continue;
+
+                            var totalGroupAmount = CountInAllStorages(x => x.ItemId == requiredItem);
+
+                            if (totalGroupAmount < stack)
+                            {
+                                return false;
+                            }
+                        }
+
+                        break;
+                }
             }
 
-            return isCraftable;
+            return true;
         }
 
         /*
@@ -220,10 +234,10 @@ public class CraftFromStorage : BasePlugin
                 counterForIcons++;
             }
         }
-        
+
         // IDEA -> user clicks on item to craft -> pop up amount to craft -> starts crafting it(grabs from storage first then bag)
-        
-        
+
+
         //OK TWO APPRAOCHES:
         // 1. have it have the ui for items from stoage(would require alot more work)
         // 2. if they have the item, just popup the amount and then when clicked craft then grab the items then from both bag & storage
@@ -233,11 +247,8 @@ public class CraftFromStorage : BasePlugin
         private static bool OnCraftDecide(UIWindmillCraftingPage __instance, RecipeIconData __0)
         {
             var accessor = UIAccessor.Instance;
-            
-           
 
-            
-            
+
             // //Make this open up just the craft count dialog
             //  try
             //  {
@@ -279,8 +290,8 @@ public class CraftFromStorage : BasePlugin
         //INIT IS AFTER GETUIPAGEDATA FOR SOME REASON
 
         //[HarmonyPatch(typeof(UIRequiredItemSelectPage), "OnDecide")]
-        
-        
+
+
         // Commented out for now as i want to go a different approach atm but would love to have a whole new UI to select stuff from storage
         /*[HarmonyPatch(typeof(UIRequiredItemSelectPage), "InitPage")]
         [HarmonyPostfix]
@@ -300,14 +311,14 @@ public class CraftFromStorage : BasePlugin
             }
 
             //TODO: opening cooking will break this but wont crash
-            
+
             //check if the
 
             // if (__0 is not WindmillCraftingMasterData uiData)
             // {
             //     return;
             // }
-            
+
             //Doing it here as this is called before init
             // if (!_hasCraftingSelectPatch)
             // {
