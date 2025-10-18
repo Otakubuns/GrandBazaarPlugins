@@ -3,19 +3,10 @@
 using BepInEx;
 using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
-using BepInEx.Unity.IL2CPP.UnityEngine;
 using BokuMono;
 using BokuMono.Data;
-using BokuMono.FieldEvent;
-using BokuMono.Utility;
 using HarmonyLib;
-using Il2CppSystem.Collections.Generic;
-using Il2CppSystem.Text;
 using UnityEngine;
-using UnityEngine.UI;
-using KeyCode = BepInEx.Unity.IL2CPP.UnityEngine.KeyCode;
-using Logger = BepInEx.Logging.Logger;
-using Math = System.Math;
 using Object = UnityEngine.Object;
 
 namespace CraftFromStorage;
@@ -119,8 +110,7 @@ public class CraftFromStorage : BasePlugin
                 storageStackBg.transform.position = ui.transform.position + new Vector3(0, -0.07f, 0);
             }
         }
-
-
+        
         /*
          * This patch makes the recipe icons to be craftable if the items are in storage
          * Does not allow crafting from storage yet, just makes the icon highlighted and clickable
@@ -215,6 +205,10 @@ public class CraftFromStorage : BasePlugin
         [HarmonyPostfix]
         private static void OnShowRequiredItemSelect(UIRequiredItemSelectPage __instance)
         {
+            
+            var residentDetail =
+                Object.FindFirstObjectByType<UIResidentInfoDetail>(FindObjectsInactive.Include);
+            
             if (__instance == null) return;
 
 

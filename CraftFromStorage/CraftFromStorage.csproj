@@ -29,20 +29,14 @@
         <Reference Include="Il2Cppmscorlib">
             <HintPath>..\..\library\Il2Cppmscorlib.dll</HintPath>
         </Reference>
-        <Reference Include="UniTask">
-            <HintPath>..\..\library\UniTask.dll</HintPath>
-        </Reference>
         <Reference Include="Unity.TextMeshPro">
-          <HintPath>..\..\library\Unity.TextMeshPro.dll</HintPath>
+            <HintPath>..\..\library\Unity.TextMeshPro.dll</HintPath>
         </Reference>
         <Reference Include="UnityEngine.CoreModule">
             <HintPath>..\..\library\UnityEngine.CoreModule.dll</HintPath>
         </Reference>
         <Reference Include="UnityEngine.UI">
             <HintPath>..\..\library\UnityEngine.UI.dll</HintPath>
-        </Reference>
-        <Reference Include="UnityEngine.UIModule">
-          <HintPath>..\..\library\UnityEngine.UIModule.dll</HintPath>
         </Reference>
     </ItemGroup>
 
