@@ -51,7 +51,7 @@ public class CraftFromStorage : BasePlugin
             if (cookingItemSelector.transform.GetChild(2).GetChild(0).GetChild(0).FindChild("HaveStorageStackBG") !=
                 null) return;
             
-            //TODO:
+            //TODO: cooking is different from windmill so need to adjust accordingly
             // var rectangle = cookingItemSelector.GetComponent<RectTransform>();
             // rectangle.sizeDelta = new Vector2(rectangle.sizeDelta.x, rectangle.sizeDelta.y + 90);
             // cookingItemSelector.transform.position += new Vector3(0, 0.07f, 0);
