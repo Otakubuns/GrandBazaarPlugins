@@ -67,6 +67,8 @@ public class CraftingHelper
      */
     public static int GetStorageAmount(uint itemId, RequiredItemType itemType, IRequiredItemGroupMaster groupMaster)
     {
+        //TODO: for categories, it seems like it uses seperate items for each item if they belong to the same category
+        //(if its flowers itll treat mint and lavender seperately) probasbly just grab first items in bag and then seperate(or leave it as is idk)
         switch (itemType)
         {
             case RequiredItemType.Item:
