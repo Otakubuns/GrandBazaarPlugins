@@ -41,5 +41,7 @@
         </Reference>
     </ItemGroup>
 
-
+    <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+        <Exec Command="xcopy /Y /F &quot;$(TargetDir)$(TargetName).dll&quot; &quot;C:\Program Files (x86)\Steam\steamapps\common\STORY OF SEASONS Grand Bazaar\BepInEx\plugins\SaveAnywhere&quot;" />
+    </Target>
 </Project>

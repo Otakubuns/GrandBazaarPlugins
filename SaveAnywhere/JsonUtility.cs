@@ -76,6 +76,10 @@ public static class JsonUtility
     }
 
 
+    /*
+     * Loads the position from the JSON file for the specified slot.
+     * Returns a Vector3(0, 0, 0) if the slot does not exist or if deserialization fails.
+     */
     public static Vector3 LoadDataJson(int slot)
     {
         try
@@ -111,7 +115,7 @@ public class Vector3Data
 
     public Vector3Data(float x, float y, float z)
     {
-        //round to 2 decimal places to reduce file size
+        //round to 2 decimal places since it's not even used in game
         X = (float) Math.Round(x, 4);
         Y = (float) Math.Round(y, 4);
         Z = (float) Math.Round(z, 4);

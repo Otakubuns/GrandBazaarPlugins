@@ -78,12 +78,13 @@ public class SaveAnywhere : BasePlugin
                 if (__instance == null) return;
                 
                 var position = JsonUtility.LoadDataJson(_currentSlot);
+                if(position == new Vector3(0, 0, 0)) return;
                 SetPlayerPosition(__instance, position, Vector3.zero);
                 _isLoadedSave = false;
             }
             catch (System.Exception e)
             {
-                LOG.LogError("Failed to load position from json: " + e.Message + "\n" + e.StackTrace);
+                LOG.LogError("Failed to load position from json: " + e.Message);
             }
         }
         
