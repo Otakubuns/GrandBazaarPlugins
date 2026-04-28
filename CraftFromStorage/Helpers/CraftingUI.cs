@@ -1,11 +1,10 @@
-﻿
-using UnityEngine;
-using BokuMono;
+﻿using BokuMono;
 using Il2CppSystem.Collections.Generic;
+using UnityEngine;
 
-namespace CraftFromStorage;
+namespace CraftFromStorage.Helpers;
 
-public class CraftingUI
+public static class CraftingUI
 {
     public static void AddStorageStackBg(List<UIRequiredItemIcon> requiredItemSelector)
     {

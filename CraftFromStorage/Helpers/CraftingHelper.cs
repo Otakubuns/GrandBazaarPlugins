@@ -4,6 +4,7 @@ using BokuMono;
 using BokuMono.Data;
 using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using Il2CppSystem.Collections.Generic;
+using UnityEngine;
 
 namespace CraftFromStorage.Helpers;
 
@@ -17,11 +18,11 @@ public static class CraftingHelper
     public static bool IsCraftable(IRequiredItemMasterData itemMasterData)
     {
         var masterDataManager = MasterDataManager.Instance;
-
+        
         for (int i = 0; i < itemMasterData.RequiredItemCount; i++)
         {
             var itemData = itemMasterData.RequiredItemList._items[i].ToString().Split(',');
-            var itemId = uint.Parse(itemData[0].Trim('(', ' '));
+            var itemId = itemMasterData.GetRequiredItemId(i);
             var stack = int.Parse(itemData[1].Trim(' ', ')'));
             var category = itemMasterData.RequiredItemTypeList._items[i];
 
@@ -42,7 +43,7 @@ public static class CraftingHelper
                         else if (masterDataManager.FarmAnimalMaster.TryGetRareId(itemId, out var rareId))
                             totalAmount += CountInAllStorages(x => x.ItemId == rareId);
                     }
-
+                    
                     break;
 
                 case RequiredItemType.Category:
@@ -51,14 +52,13 @@ public static class CraftingHelper
                     break;
 
                 case RequiredItemType.Group:
-                    if (!itemMasterData.GroupMaster.TryGetGroupData(itemId, out var groupData) ||
-                        groupData == null) continue;
+                    itemMasterData.GroupMaster.TryGetGroupData(itemId, out var groupData);
 
                     foreach (var requiredItem in groupData.RequiredItemIdList)
                     {
                         if (requiredItem == 0) continue;
 
-                        totalAmount = CountInAllStorages(x => x.ItemId == requiredItem);
+                        totalAmount += CountInAllStorages(x => x.ItemId == requiredItem);
 
                         if (masterDataManager.CropMaster.TryGetIrregularId(requiredItem, out var irregularId))
                             totalAmount += CountInAllStorages(x => x.ItemId == irregularId);
@@ -157,9 +157,20 @@ public static class CraftingHelper
      * @param predicate - the predicate to use to find the item(the itemid, category, groupId)
      * returns the total amount found(used in checking if craftable)
      */
-    private static int CountInAllStorages(Func<ItemData, bool> predicate)
+    public static int CountInAllStorages(Func<ItemData, bool> predicate)
     {
         var inventoryManager = ManagedSingleton<InventoryManager>.Instance;
+        // var storageAmount = inventoryManager.HouseStorage.itemDatas
+        //     .Where(predicate).Sum(x => x.Stack);
+        //
+        // var bagAmount = inventoryManager.BagItemStorage.itemDatas
+        //     .Where(predicate).Sum(x => x.Stack);
+        //
+        // var bagToolAmount = inventoryManager.BagToolStorage.itemDatas
+        //     .Where(predicate).Sum(x => x.Stack);
+        //
+        // CraftFromStorage._log.LogInfo($"Storage Amount: {storageAmount}\nBag Amount: {bagAmount}\nTool Amount: {bagToolAmount}\n==========");
+        //
         return inventoryManager.BagItemStorage.itemDatas
                    .Where(predicate).Sum(x => x.Stack)
                + inventoryManager.HouseStorage.itemDatas
@@ -211,13 +222,11 @@ public static class CraftingHelper
                 {
                     if (selectedItem.ItemId == 0) continue;
                     // make sure that if it is an adapt recipe that it doesnt use that to get max craft amount(since its optional)
-                    CraftFromStorage._log.LogInfo($"Getting craftable amount for itemId: {selectedItem.ItemId}");
                     var storageAmount = GetAmount(selectedItem.Storage, selectedItem.ItemId);
 
                     selectedItem.Storage.itemDatas.ToList().ForEach(x =>
                     {
                         if (x.ItemId == 0 || x.Stack == 0) return;
-                        CraftFromStorage._log.LogInfo($"Storage ItemId: {x.ItemId} Stack: {x.Stack}");
                     });
                     CraftFromStorage._log.LogInfo(
                         $"Found {storageAmount} in storage for itemId: {selectedItem.ItemId} with stack needed: {item.Stack}");
@@ -237,11 +246,26 @@ public static class CraftingHelper
         }
     }
 
-    public static void RemoveItemsFromStorage(SlotItemData useItemData, IRecipeMasterData recipe, int count)
+    /*
+     * Check if there are any other ingredients in other "tabs" for adapt recipe
+     */
+    public static bool HaveAdaptItemsInStorage(Il2CppReferenceArray<ItemData> houseStorageItemDatas,
+        UIRequiredItemDetail curDetail)
     {
-        var houseStorage = ManagedSingleton<InventoryManager>.Instance.HouseStorage;
-        var amountToRemove = useItemData.Stack * count - useItemData.Stack;
+        for (var i = 4; i < 6; i++)
+        {
+            var ids = curDetail.requiredItemSelector.requiredItems[i]?.ids;
+            // While 1 is usually the amount needed for apart recipe i am making sure to use the stack amount in requireditemdata
+            var amountNeeded = curDetail.requiredItemSelector.requiredItems[i]?.Stack;
+            if (ids == null) continue;
+            foreach (var id in ids)
+            {
+                var isThereItem = CountInStorage(x => x.ItemId == id);
+                if (isThereItem >= amountNeeded) return true;
+            }
+        }
 
-        houseStorage.itemDatas[useItemData.Slot]?.Reduce(amountToRemove, out _);
+        return false;
     }
+    
 }
