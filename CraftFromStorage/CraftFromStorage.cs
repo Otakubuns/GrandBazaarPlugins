@@ -359,35 +359,21 @@ public class CraftFromStorage : BasePlugin
             
             return CraftingHelper.HaveAdaptItemsInStorage(__instance.curDetail);
         }
-
-        // [HarmonyPatch(typeof(CookingManager), "Cooking")]
-        // [HarmonyPrefix]
-        // private static void PatchCooking(CookingMasterData recipe, int count, int qualityValue,
-        //     List<SlotItemData> useItemList)
-        // {
-        //     //Slot ItemData holds toragetype and the slot in storage
-        //     // Try to see if moving the items into the bag(not through native addtobag since the bag could be full)
-        //     var houseStorage = InventoryManager.Instance.HouseStorage;
-        //     var bagStorage = InventoryManager.Instance.BagItemStorage;
-        //     foreach (var itemData in useItemList.Where(itemData => itemData.Storage is HouseStorageManager))
-        //     {
-        //     }
-        // }
-
-        //TryCraft is responible for it so i would prefer to modify that, going to be a pain BUT its possible
-        //OR just skip trycraft and do the logic in a hekper function and call it here and skip it. this is mostly a wrapper
+        
+        /*
+         * This patch gives the proper amount for crafting when using storage ingredients
+         */
         [HarmonyPatch(typeof(UIRequiredItemSelector), "GetMaxCraftCount")]
         [HarmonyPostfix]
         private static void Patch(UIRequiredItemSelector __instance, ref int __result)
         {
-            // Add one for the initial craft amount in slotitemdata(real trycraft also has a count paramter that starts at 1)
+            // Add one for the initial craft amount in slotitemdata(real trycraft also has a count parameter that starts at 1)
             var amount = CraftingHelper.GetMaxCraftAmount(__instance.requiredItems) + 1;
             __result = amount;
         }
 
-        //TODO: Cooking and Crafting need to be patched as well
+        //TODO: Crafting
         //WindMillCrafting.Crafting
-        //CookingManager.Crafting
 
         /**
          * This patch overrides when the user clicks on an item to reference the storage(if the user is a storage tab)
@@ -437,6 +423,7 @@ public class CraftFromStorage : BasePlugin
                 var uiIconKey = Resources.FindObjectsOfTypeAll<UIKeyIcon>()
                     .FirstOrDefault(storage => storage.name == "UIKeyStorageSelectItemLeft");
 
+                // This calls the buttons update uidatalist, so it's done for us
                 uiIconKey?.BokuMono_UI_ITouchable_InputTouch(ITouchable.InputState.Down, Vector2.zero, null);
             }
 
@@ -514,7 +501,6 @@ public class CraftFromStorage : BasePlugin
             }
         }
 
-        //TODO: text for the amount of items needs to be corrected. Other than that all that now needs to be worked one i
         /**
          * This patch adds the tabs UI(uipagemarklist) for switching and also UIButtons for moving between tabs
          */
@@ -628,6 +614,7 @@ public class CraftFromStorage : BasePlugin
 
         if (!isBag)
         {
+            //This calculates the slot needed to grab the item
             var index = (pageNumber - 1) * 32;
             var originalIndex = 0;
             for (var i = index; i < (index + 32); i++)
@@ -650,7 +637,8 @@ public class CraftFromStorage : BasePlugin
                 var item = itemList._items[i];
 
                 var sourceItem = bagStorage.itemDatas[i];
-
+                
+                //Checks if the user has their backpack slots unlocked(if not will go back to the lock icon)
                 if (i >= bagStorage.CurrentCapacity)
                 {
                     item.state = IconData.State.LockItem;
@@ -692,106 +680,15 @@ public class CraftFromStorage : BasePlugin
         }
     }
 
+    /*
+     * Calculates the proper pages needed for the user, since the storage only uses 24 but the bag/ItemSelect UI uses 32
+     * returns 1 extra to account for the tab for the bag
+     */
     private static int MaxPageAmount()
     {
-        var storageTabs = (int) Math.Ceiling((double) (24 * InventoryManager.Instance.HouseStorage.ParcelCount) / 32);
-
+        var total = 24 * InventoryManager.Instance.HouseStorage.ParcelCount;
+        var storageTabs = (total + 31) / 32;
+        
         return storageTabs + 1;
     }
-
-
-    /*
-     * This patch is to remove the items from storage when crafting. This might not be to needed after patching tryselecteditme
-     */
-    // [HarmonyPatch(typeof(CookingManager), "Cooking")]
-    // [HarmonyPostfix]
-    // private static void PatchCookingManager(CookingManager __instance, IRecipeMasterData recipe,
-    //     int count, int qualityValue, List<SlotItemData> useItemList)
-    // {
-    //     try
-    //     {
-    //         foreach (var useItemData in useItemList)
-    //         {
-    //             if (useItemData == null || useItemData.Storage.GetType() == typeof(BagItemStorageManager)) continue;
-    //             CraftingHelper.RemoveItemsFromStorage(useItemData, recipe, count);
-    //         }
-    //     }
-    //     catch (Exception e)
-    //     {
-    //         _log.LogError($"Error in PatchCookingManager: {e.Message}\n{e.StackTrace}");
-    //     }
-    // }
-
-    // // This does the crafting thing(keep it commented for now as i want thte item seleciton to be manual)
-    // // [HarmonyPatch(typeof(UIRequiredItemSelectPage), "OnShow")]
-    // // [HarmonyPostfix]
-    // private static void TestingCountPage(UIRequiredItemSelectPage __instance)
-    // {
-    //     try
-    //     {
-    //         var requiredItemData = __instance.curDetail.requiredItemSelector;
-    //         if (requiredItemData == null) return;
-    //         var storage = InventoryManager.Instance;
-    //
-    //         for (var i = 0; i < requiredItemData.requiredItems.Count; i++)
-    //         {
-    //             var requiredItem = requiredItemData.requiredItems[i];
-    //             if (requiredItem == null) continue;
-    //
-    //             //check if any ids match required item ids
-    //             var itemData = storage.HouseStorage.itemDatas
-    //                 .FirstOrDefault(x => requiredItem.ids._items.Contains(x.ItemId));
-    //
-    //             // Clone the itemData to avoid modifying the original directly
-    //             var clonedItemData = ItemData.Clone(itemData);
-    //
-    //             var slot = storage.HouseStorage.itemDatas.IndexOf(itemData);
-    //             requiredItemData.TrySelectRequiredItem(slot, storage.HouseStorage, clonedItemData,
-    //                 out var tempItemData);
-    //             storage.HouseStorage.itemDatas[slot] = tempItemData;
-    //
-    //             try
-    //             {
-    //                 var uiRequiredItemIcon = __instance.curDetail.requiredItemSelector.requiredItemIcon._items[i];
-    //                 // This will update the icon
-    //                 //bug: on first open it will make it blacked out still
-    //                 // uiRequiredItemIcon.OnUpdate(UIRequiredItemIcon.State.Normal);
-    //                 // __instance.curDetail.requiredItemSelector.OnUpdate();
-    //                 uiRequiredItemIcon.havedStackText.text = tempItemData.Stack.ToString();
-    //             }
-    //             catch (Exception e)
-    //             {
-    //                 _log.LogError($"Error getting uiRequiredItemIcon: {e.Message}\n{e.StackTrace}");
-    //                 continue;
-    //             }
-    //         }
-    //
-    //         var maxCount =
-    //             CraftingHelper.GetMaxCraftAmount(__instance.curDetail.requiredItemSelector.requiredItems);
-    //         var craftQuality = requiredItemData.GetQualityValue(true);
-    //
-    //         _log.LogInfo($"Max Craft Amount: {maxCount}, Craft Quality: {craftQuality}");
-    //         var mdm = MasterDataManager.Instance;
-    //         var dialogData = mdm.DialogMaster.GetData(100000);
-    //
-    //         if (__instance.curRecipeMasterData.RecipeType == RecipeMasterType.Cooking)
-    //         {
-    //             var cookingDialogData = __instance.GetCookingDialogData(__instance.curRecipeMasterData, dialogData,
-    //                 maxCount, craftQuality);
-    //
-    //             UIAccessor.Instance.RequestOpenDialog(UILoadKey.CookingCountDialog, cookingDialogData);
-    //         }
-    //         else if (__instance.curRecipeMasterData.RecipeType == RecipeMasterType.Windmill)
-    //         {
-    //             craftQuality = requiredItemData.GetQualityValue(false);
-    //             var windmillDialogData = __instance.GetWindmillCraftDialogData(__instance.curRecipeMasterData,
-    //                 dialogData, maxCount, craftQuality);
-    //             UIAccessor.Instance.RequestOpenDialog(UILoadKey.WindmillCraftCountDialog, windmillDialogData);
-    //         }
-    //     }
-    //     catch (Exception e)
-    //     {
-    //         _log.LogError($"Error in OnCookingDecide: {e.Message}\n{e.StackTrace}");
-    //     }
-    // }
 }
