@@ -4,17 +4,19 @@ using BokuMono;
 using BokuMono.Data;
 using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using Il2CppSystem.Collections.Generic;
-using UnityEngine;
 
 namespace CraftFromStorage.Helpers;
 
+/// <summary>
+/// CraftingHelper is a utility class that provides methods to check if a recipe can be crafted & storage amounts.
+/// </summary>
 public static class CraftingHelper
 {
-    /*
-     * This function will check if a recipe is craftable from storage and bag
-     * @param itemMasterData - the recipe to check(holds ingredient info only, not the recipe info)
-     * returns true if it is
-     */
+    /// <summary>
+    /// Checks if a recipe is craftable from storage and bag.
+    /// </summary>
+    /// <param name="itemMasterData">The recipe to check, which holds ingredient information only.</param>
+    /// <returns>Returns true if the recipe can be crafted using the available items in storage and bag.</returns>
     public static bool IsCraftable(IRequiredItemMasterData itemMasterData)
     {
         var masterDataManager = MasterDataManager.Instance;
@@ -77,48 +79,11 @@ public static class CraftingHelper
         return true;
     }
 
-    /*
-     * This function will return the amount of an item in storage only
-     * @param itemId - the item to check
-     * @param itemType - the type of item to check (item, category, group)
-     * @param groupMaster - the group master data to use if checking a group(shouldn't be but just in case)
-     */
-    public static int GetStorageAmount(uint itemId, RequiredItemType itemType, IRequiredItemGroupMaster groupMaster)
-    {
-        switch (itemType)
-        {
-            case RequiredItemType.Item:
-                return CountInStorage(x => x.ItemId == itemId);
-
-            case RequiredItemType.Category:
-                return CountInStorage(x => x.Category == itemId);
-
-            case RequiredItemType.Group:
-                if (!groupMaster.TryGetGroupData(itemId, out var groupData) ||
-                    groupData == null) return 0;
-
-                foreach (var requiredItem in groupData.RequiredItemIdList)
-                {
-                    if (requiredItem == 0) continue;
-
-                    var totalGroupAmount = CountInStorage(x => x.ItemId == requiredItem);
-                    return totalGroupAmount;
-                }
-
-                break;
-            default:
-                return 0;
-        }
-
-        return 0;
-    }
-
-    /*
-     * This function will return the amount of multiple items in storage only
-     * The improved version of GetStorageAmount using itemIds only
-     * @param itemIds - the list of item ids to check
-     * returns the total amount found(for text display)
-     */
+    /// <summary>
+    /// Return the amount of multiple items in storage only.
+    /// </summary>
+    /// <param name="itemIds">List of item ids to check.</param>
+    /// <returns>Total amount found.</returns>
     public static int GetStorageAmount(List<uint> itemIds)
     {
         var masterDataManager = MasterDataManager.Instance;
@@ -140,12 +105,12 @@ public static class CraftingHelper
         return totalAmount;
     }
 
-    /*
-     * This function will return the amount of an item in a specific storage
-     * @param storage - the storage to check
-     * @param itemId - the item to check
-     * returns the total amount found
-     */
+    /// <summary>
+    /// Return the amount of an item in specific storage
+    /// </summary>
+    /// <param name="storage">Storage type to search in.</param>
+    /// <param name="itemId">ID of the item to search for.</param>
+    /// <returns>Amount found.</returns>
     private static int GetAmount(StorageManager storage, uint itemId)
     {
         return storage.itemDatas
@@ -153,25 +118,14 @@ public static class CraftingHelper
             .Sum(x => x.Stack);
     }
 
-    /*
-     * This function will return the amount of an item in all storages(bag, house storage, tool storage)
-     * @param predicate - the predicate to use to find the item(the itemid, category, groupId)
-     * returns the total amount found(used in checking if craftable)
-     */
+    /// <summary>
+    /// Counts the total amount of items across all storages (bag, house storage, tool storage) that match the condition.
+    /// </summary>
+    /// <param name="predicate">Condition to look for.</param>
+    /// <returns>Total amount combined in all storages.</returns>
     public static int CountInAllStorages(Func<ItemData, bool> predicate)
     {
         var inventoryManager = ManagedSingleton<InventoryManager>.Instance;
-        // var storageAmount = inventoryManager.HouseStorage.itemDatas
-        //     .Where(predicate).Sum(x => x.Stack);
-        //
-        // var bagAmount = inventoryManager.BagItemStorage.itemDatas
-        //     .Where(predicate).Sum(x => x.Stack);
-        //
-        // var bagToolAmount = inventoryManager.BagToolStorage.itemDatas
-        //     .Where(predicate).Sum(x => x.Stack);
-        //
-        // CraftFromStorage._log.LogInfo($"Storage Amount: {storageAmount}\nBag Amount: {bagAmount}\nTool Amount: {bagToolAmount}\n==========");
-        //
         return inventoryManager.BagItemStorage.itemDatas
                    .Where(predicate).Sum(x => x.Stack)
                + inventoryManager.HouseStorage.itemDatas
@@ -180,11 +134,11 @@ public static class CraftingHelper
                    .Where(predicate).Sum(x => x.Stack);
     }
 
-    /*
-     * This function will return the amount of an item in storage only(house storage and tool storage)
-     * @param predicate - the predicate to use to find the item(the itemid, category, groupId)
-     * returns the total amount found(used in getting storage amount so that's why bag storage is excluded)
-     */
+    /// <summary>
+    /// Will return the amount of an item in storage only. (house storage and tool storage)
+    /// </summary>
+    /// <param name="predicate">The condition to search for.</param>
+    /// <returns>The total amount of items in all storages.</returns>
     private static int CountInStorage(Func<ItemData, bool> predicate)
     {
         var inventoryManager = ManagedSingleton<InventoryManager>.Instance;
@@ -194,6 +148,12 @@ public static class CraftingHelper
                    .Where(predicate).Sum(x => x.Stack);
     }
 
+    /// <summary>
+    /// Gets the ItemData of an item in storage that matches the id and stack amount
+    /// </summary>
+    /// <param name="currentRequiredItem">List of required items ids to craft</param>
+    /// <param name="stack">Amount needed to craft</param>
+    /// <returns>ItemData of the found item</returns>
     public static ItemData GetItemDataFromStorage(List<uint> currentRequiredItem, int stack)
     {
         var houseStorage = ManagedSingleton<InventoryManager>.Instance.HouseStorage;
@@ -210,20 +170,25 @@ public static class CraftingHelper
             currentRequiredItem.Contains(itemData.ItemId) && itemData.Stack >= stack);
     }
 
+    /// <summary>
+    /// Gets the maximum times a recipe can be crafted based on the required items and their amounts in storage and bag.
+    /// </summary>
+    /// <param name="requiredItemList">List of items required to craft</param>
+    /// <returns>Maximum amount that can be crafted.</returns>
     public static int GetMaxCraftAmount(Il2CppReferenceArray<RequiredItemData> requiredItemList)
     {
         try
         {
             var required = new System.Collections.Generic.Dictionary<(bool isBag, int slot), int>();
-            
+
             foreach (var item in requiredItemList)
             {
                 if (item == null) continue;
-                
+
                 foreach (var selectedItem in item.SelectedItems)
                 {
                     if (selectedItem.ItemId == 0) continue;
-                    
+
                     var key = (
                         selectedItem.Storage is BagItemStorageManager,
                         selectedItem.Slot
@@ -252,7 +217,7 @@ public static class CraftingHelper
                 if (max < minCraftable)
                     minCraftable = max;
             }
-            
+
             return minCraftable == int.MaxValue ? 1 : minCraftable;
         }
         catch (Exception ex)
@@ -261,20 +226,22 @@ public static class CraftingHelper
             return 1;
         }
     }
-
-    /*
-     * Check if there are any other ingredients in other "tabs" for adapt recipe
-     */
-    public static bool HaveAdaptItemsInStorage(UIRequiredItemDetail curDetail)
+    
+    /// <summary>
+    /// Check if there are any other ingredients in other "tabs" for adapt(arrange) recipe
+    /// </summary>
+    /// <param name="requiredItems">The list of items the recipe needs</param>
+    /// <returns>True if there is enough items(have no extra items)</returns>
+    public static bool HaveAdaptItemsInStorage(Il2CppReferenceArray<RequiredItemData> requiredItems)
     {
         var isEnough = true;
         // Done this way to be dynamic
-        var count = curDetail.requiredItemSelector.requiredItems.Count;
+        var count = requiredItems.Count;
         for (var i = count - 2; i < count; i++)
         {
-            var ids = curDetail.requiredItemSelector.requiredItems[i]?.ids;
+            var ids = requiredItems[i]?.ids;
             // While 1 is usually the amount needed for apart recipe i am making sure to use the stack amount in requireditemdata
-            var amountNeeded = curDetail.requiredItemSelector.requiredItems[i]?.Stack;
+            var amountNeeded = requiredItems[i]?.Stack;
             if (ids == null) continue;
             foreach (var id in ids)
             {
@@ -286,6 +253,14 @@ public static class CraftingHelper
         return isEnough;
     }
 
+    /// <summary>
+    /// An implementation of the original games TryUse, reduces the items amount by the parameter
+    /// </summary>
+    /// <param name="storage">The storage manager to use from.</param>
+    /// <param name="slot">The item slot/index.</param>
+    /// <param name="stack">The amount to reduce by.</param>
+    /// <param name="remaining">The amount reamining after reducing.</param>
+    /// <returns>True if the Item was successfully reduced</returns>
     public static bool StorageTryUse(StorageManager storage, int slot, int stack, out int remaining)
     {
         remaining = stack;
