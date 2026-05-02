@@ -3,7 +3,7 @@
     <PropertyGroup>
         <TargetFramework>net6.0</TargetFramework>
         <AssemblyName>CraftFromStorage</AssemblyName>
-        <Description>My first plugin</Description>
+        <Description>Craft from the storage</Description>
         <Version>0.9.0</Version>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <LangVersion>latest</LangVersion>
@@ -41,6 +41,12 @@
         <Reference Include="UnityEngine.UI">
             <HintPath>..\..\library\UnityEngine.UI.dll</HintPath>
         </Reference>
+    </ItemGroup>
+    
+    <ItemGroup>
+      <ClCompile Include="CookingManager.Cookingb__6.c" />
+      <ClCompile Include="CookingManager.Cookingb__7.c" />
+      <ClCompile Include="CookingManagerCookingb__8.c" />
     </ItemGroup>
 
     <Target Name="PostBuild" AfterTargets="PostBuildEvent">

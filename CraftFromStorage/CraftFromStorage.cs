@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using BepInEx;
 using BepInEx.Logging;
@@ -8,8 +9,12 @@ using BokuMono.Data;
 using BokuMono.UI;
 using CraftFromStorage.Helpers;
 using HarmonyLib;
+using Il2CppInterop.Runtime;
 using Il2CppSystem.Text;
+using TS.Engine;
 using UnityEngine;
+using static BokuMono.Data.ItemData;
+using Action = Il2CppSystem.Action;
 using Object = UnityEngine.Object;
 
 namespace CraftFromStorage;
@@ -28,6 +33,74 @@ public class CraftFromStorage : BasePlugin
 
     private class CraftingPatch
     {
+        /*
+         * This patch patches the Cooking functions b__6, part of the coroutine of Cooking. This adds house storage handling
+         */
+        [HarmonyPatch(typeof(CookingManager.__c__DisplayClass11_1), "_Cooking_b__6")]
+        [HarmonyPrefix]
+        private static bool PatchingCookingLogic(CookingManager.__c__DisplayClass11_1 __instance)
+        {
+            var recipe = __instance.field_Public___c__DisplayClass11_0_0.recipe;
+            var count = __instance.field_Public___c__DisplayClass11_0_0.count;
+            var quality = __instance.field_Public___c__DisplayClass11_0_0.qualityValue;
+            var useItemList = __instance.field_Public___c__DisplayClass11_0_0.useItemList;
+            var manager = __instance.field_Public___c__DisplayClass11_0_0.__4__this;
+            
+            if (manager == null || recipe == null)
+                return true;
+
+            manager.CookedRecipe(recipe.Id);
+
+            var resultItem = CreateByQualityValue(recipe.CookedFood, count, quality, -1, 0);
+
+            if (count <= 1) return true;
+            
+            //because the first count is already in useItemList we remove 1
+            var remaining = count - 1;
+            
+            foreach (var itemData in useItemList)
+            {
+                var item = Clone(itemData);
+                if (item == null) continue;
+
+                //ItemData stack is the 
+                var required = remaining * itemData.Stack;
+
+                if(itemData.Storage is not StorageManager storage) continue;
+
+                if (!CraftingHelper.StorageTryUse(itemData.Storage, itemData.Slot, required, out var leftoverAmount))
+                {
+                    item.Stack = leftoverAmount;
+                    storage.Add(item, out _);
+                }
+            }
+            
+            //Now handling animation stuff 6__7, 6__8
+            var player = GameController.Instance?.playerCharacter;
+            if (player == null) return false;
+
+            player.ReadyActionRaise(true);
+
+            //b__7 handles the animations and freeing the character after cooking
+            var onClose = __instance.__9__7 ?? (__instance.__9__7 =
+                DelegateSupport.ConvertDelegate<Action>(
+                    (System.Action) __instance._Cooking_b__7
+                ));
+
+
+            // Handling cooked food to hand to player 6__8
+            var locals2 = new CookingManager.__c__DisplayClass11_2();
+            locals2.cookFood = resultItem;
+            locals2.field_Public___c__DisplayClass11_1_0 = __instance;
+            var onConfirm = DelegateSupport.ConvertDelegate<Action>(
+                (System.Action) locals2._Cooking_b__8
+            );
+
+            player.ActionRaise(PlayerRaise.RaiseType.Cooking, resultItem.Master, onClose, onConfirm, false);
+
+            return false;
+        }
+
         /*
          * This patch is to add the extra text showing how many items are in storage under the bag amount for cooking
          */
@@ -114,7 +187,7 @@ public class CraftFromStorage : BasePlugin
             ref bool __result)
         {
             if (__result) return; // if already true no real need to check
-            
+
             __result = CraftingHelper.IsCraftable(recipe);
         }
 
@@ -249,29 +322,30 @@ public class CraftFromStorage : BasePlugin
         //             break;
         //         }
         //     }
-
-
-        //Note: Arrange is adapt in the code/objects
+        
+        /*
+         * This patch updates the text for the selected item to show the amount in storage too(in vanilla it counts all items by id too)
+         */
         [HarmonyPatch(typeof(UIRequiredItemIcon))]
         [HarmonyPatch("Setup", new Type[] {
-                typeof(BagItemStorageManager), typeof(RequiredItemData), typeof(int), typeof(UIRequiredItemIcon.State)
-            })]
+            typeof(BagItemStorageManager), typeof(RequiredItemData), typeof(int), typeof(UIRequiredItemIcon.State)})]
         [HarmonyPostfix]
         static void PatchIconSetup(UIRequiredItemIcon __instance, BagItemStorageManager cloneBagMgr,
             RequiredItemData requiredItemData, int quality, UIRequiredItemIcon.State state)
         {
             if (state != UIRequiredItemIcon.State.Normal ||
                 UIAccessor.Instance.CurrentUIKey != UILoadKey.RequiredItemSelect) return;
-            
+
             var itemSelectedString = requiredItemData.IconId.Replace("item_icon_", "");
 
             //item_icon_110201
             if (!uint.TryParse(itemSelectedString, out var itemSelectedID)) return;
-            
+
             var amount = CraftingHelper.CountInAllStorages(data => data.ItemId == itemSelectedID);
             __instance.havedStackText.text = amount.ToString();
         }
 
+        
         [HarmonyPatch(typeof(UIRequiredItemSelectPage), "SetShortCutFocus")]
         [HarmonyPrefix]
         private static bool PatchAdaptRecipeSelection(UIRequiredItemSelectPage __instance)
@@ -282,10 +356,38 @@ public class CraftFromStorage : BasePlugin
 
             if (!detail.IsSelectionCompletedRequiredItem() ||
                 __instance.shortCutCursorIndex >= 0) return true;
-
-            return !CraftingHelper.HaveAdaptItemsInStorage(InventoryManager.Instance.HouseStorage.itemDatas,
-                __instance.curDetail);
+            
+            return CraftingHelper.HaveAdaptItemsInStorage(__instance.curDetail);
         }
+
+        // [HarmonyPatch(typeof(CookingManager), "Cooking")]
+        // [HarmonyPrefix]
+        // private static void PatchCooking(CookingMasterData recipe, int count, int qualityValue,
+        //     List<SlotItemData> useItemList)
+        // {
+        //     //Slot ItemData holds toragetype and the slot in storage
+        //     // Try to see if moving the items into the bag(not through native addtobag since the bag could be full)
+        //     var houseStorage = InventoryManager.Instance.HouseStorage;
+        //     var bagStorage = InventoryManager.Instance.BagItemStorage;
+        //     foreach (var itemData in useItemList.Where(itemData => itemData.Storage is HouseStorageManager))
+        //     {
+        //     }
+        // }
+
+        //TryCraft is responible for it so i would prefer to modify that, going to be a pain BUT its possible
+        //OR just skip trycraft and do the logic in a hekper function and call it here and skip it. this is mostly a wrapper
+        [HarmonyPatch(typeof(UIRequiredItemSelector), "GetMaxCraftCount")]
+        [HarmonyPostfix]
+        private static void Patch(UIRequiredItemSelector __instance, ref int __result)
+        {
+            // Add one for the initial craft amount in slotitemdata(real trycraft also has a count paramter that starts at 1)
+            var amount = CraftingHelper.GetMaxCraftAmount(__instance.requiredItems) + 1;
+            __result = amount;
+        }
+
+        //TODO: Cooking and Crafting need to be patched as well
+        //WindMillCrafting.Crafting
+        //CookingManager.Crafting
 
         /**
          * This patch overrides when the user clicks on an item to reference the storage(if the user is a storage tab)

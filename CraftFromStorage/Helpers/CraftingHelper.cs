@@ -18,8 +18,9 @@ public static class CraftingHelper
     public static bool IsCraftable(IRequiredItemMasterData itemMasterData)
     {
         var masterDataManager = MasterDataManager.Instance;
-        
-        for (int i = 0; i < itemMasterData.RequiredItemCount; i++)
+        if (masterDataManager == null) return false;
+
+        for (var i = 0; i < itemMasterData.RequiredItemCount; i++)
         {
             var itemData = itemMasterData.RequiredItemList._items[i].ToString().Split(',');
             var itemId = itemMasterData.GetRequiredItemId(i);
@@ -33,22 +34,22 @@ public static class CraftingHelper
             {
                 case RequiredItemType.Item:
                     totalAmount = CountInAllStorages(x =>
-                        x.ItemId == itemId);
+                        x != null && x.ItemId == itemId);
 
                     // Added check for irrefular and rare items(giant crops)
                     if (totalAmount < stack)
                     {
                         if (masterDataManager.CropMaster.TryGetIrregularId(itemId, out var irregularId))
-                            totalAmount += CountInAllStorages(x => x.ItemId == irregularId);
+                            totalAmount += CountInAllStorages(x => x != null && x.ItemId == irregularId);
                         else if (masterDataManager.FarmAnimalMaster.TryGetRareId(itemId, out var rareId))
-                            totalAmount += CountInAllStorages(x => x.ItemId == rareId);
+                            totalAmount += CountInAllStorages(x => x != null && x.ItemId == rareId);
                     }
-                    
+
                     break;
 
                 case RequiredItemType.Category:
                     totalAmount = CountInAllStorages(x =>
-                        x.Category == itemId);
+                        x != null && x.Category == itemId);
                     break;
 
                 case RequiredItemType.Group:
@@ -58,12 +59,12 @@ public static class CraftingHelper
                     {
                         if (requiredItem == 0) continue;
 
-                        totalAmount += CountInAllStorages(x => x.ItemId == requiredItem);
+                        totalAmount += CountInAllStorages(x => x != null && x.ItemId == requiredItem);
 
                         if (masterDataManager.CropMaster.TryGetIrregularId(requiredItem, out var irregularId))
-                            totalAmount += CountInAllStorages(x => x.ItemId == irregularId);
+                            totalAmount += CountInAllStorages(x => x != null && x.ItemId == irregularId);
                         else if (masterDataManager.FarmAnimalMaster.TryGetRareId(requiredItem, out var rareId))
-                            totalAmount += CountInAllStorages(x => x.ItemId == rareId);
+                            totalAmount += CountInAllStorages(x => x != null && x.ItemId == rareId);
                     }
 
                     break;
@@ -124,15 +125,15 @@ public static class CraftingHelper
         var totalAmount = 0;
         foreach (var itemId in itemIds)
         {
-            totalAmount += CountInStorage(x => x.ItemId == itemId);
+            totalAmount += CountInStorage(x => x != null && x.ItemId == itemId);
 
             if (masterDataManager.CropMaster.TryGetIrregularId(itemId, out var irregularId))
             {
-                totalAmount += CountInStorage(x => x.ItemId == irregularId);
+                totalAmount += CountInStorage(x => x != null && x.ItemId == irregularId);
             }
             else if (masterDataManager.FarmAnimalMaster.TryGetRareId(itemId, out var rareId))
             {
-                totalAmount += CountInStorage(x => x.ItemId == rareId);
+                totalAmount += CountInStorage(x => x != null && x.ItemId == rareId);
             }
         }
 
@@ -213,35 +214,50 @@ public static class CraftingHelper
     {
         try
         {
-            var craftableAmounts = Array.Empty<int>();
-            // ok so grab all the items and there stacks and divide it by the amount needed and then at the end just check for lowest amount and thats amount to craft
+            var required = new System.Collections.Generic.Dictionary<(bool isBag, int slot), int>();
+            
             foreach (var item in requiredItemList)
             {
                 if (item == null) continue;
+                
                 foreach (var selectedItem in item.SelectedItems)
                 {
                     if (selectedItem.ItemId == 0) continue;
-                    // make sure that if it is an adapt recipe that it doesnt use that to get max craft amount(since its optional)
-                    var storageAmount = GetAmount(selectedItem.Storage, selectedItem.ItemId);
+                    
+                    var key = (
+                        selectedItem.Storage is BagItemStorageManager,
+                        selectedItem.Slot
+                    );
 
-                    selectedItem.Storage.itemDatas.ToList().ForEach(x =>
-                    {
-                        if (x.ItemId == 0 || x.Stack == 0) return;
-                    });
-                    CraftFromStorage._log.LogInfo(
-                        $"Found {storageAmount} in storage for itemId: {selectedItem.ItemId} with stack needed: {item.Stack}");
-                    var maxCraftable = storageAmount / item.Stack;
-                    CraftFromStorage._log.LogInfo($"Max craftable for itemId {selectedItem.ItemId} is {maxCraftable}");
-                    craftableAmounts = craftableAmounts.Append(maxCraftable).ToArray();
+                    required[key] = required.TryGetValue(key, out var current)
+                        ? current + item.Stack
+                        : item.Stack;
                 }
             }
-            
-            CraftFromStorage._log.LogInfo($"Craftable amounts: {string.Join(", ", craftableAmounts)}");
 
-            return craftableAmounts.Length > 0 ? craftableAmounts.Min() : 1;
+            if (required.Count == 0) return 1;
+
+            var minCraftable = int.MaxValue;
+
+            foreach (var (key, needed) in required)
+            {
+                var (isBag, slot) = key;
+
+                var storageAmount = isBag
+                    ? InventoryManager.Instance.BagItemStorage.GetStack(slot)
+                    : InventoryManager.Instance.HouseStorage.GetStack(slot);
+
+                var max = storageAmount / needed;
+
+                if (max < minCraftable)
+                    minCraftable = max;
+            }
+            
+            return minCraftable == int.MaxValue ? 1 : minCraftable;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            CraftFromStorage._log.LogError($"Crafting Error: {ex}");
             return 1;
         }
     }
@@ -249,10 +265,12 @@ public static class CraftingHelper
     /*
      * Check if there are any other ingredients in other "tabs" for adapt recipe
      */
-    public static bool HaveAdaptItemsInStorage(Il2CppReferenceArray<ItemData> houseStorageItemDatas,
-        UIRequiredItemDetail curDetail)
+    public static bool HaveAdaptItemsInStorage(UIRequiredItemDetail curDetail)
     {
-        for (var i = 4; i < 6; i++)
+        var isEnough = true;
+        // Done this way to be dynamic
+        var count = curDetail.requiredItemSelector.requiredItems.Count;
+        for (var i = count - 2; i < count; i++)
         {
             var ids = curDetail.requiredItemSelector.requiredItems[i]?.ids;
             // While 1 is usually the amount needed for apart recipe i am making sure to use the stack amount in requireditemdata
@@ -261,11 +279,26 @@ public static class CraftingHelper
             foreach (var id in ids)
             {
                 var isThereItem = CountInStorage(x => x.ItemId == id);
-                if (isThereItem >= amountNeeded) return true;
+                if (isThereItem >= amountNeeded) isEnough = false;
             }
         }
 
-        return false;
+        return isEnough;
     }
-    
+
+    public static bool StorageTryUse(StorageManager storage, int slot, int stack, out int remaining)
+    {
+        remaining = stack;
+
+        var items = storage.ItemDatas;
+        if (items == null) return false;
+
+        if (slot < 0 || slot >= items.Length) return false;
+
+        var targetItem = items[slot];
+
+        if (targetItem == null || targetItem.ItemId == 0) return false;
+
+        return targetItem.Reduce(stack, out remaining);
+    }
 }
