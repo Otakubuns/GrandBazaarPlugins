@@ -721,7 +721,6 @@ public class CraftFromStorage : BasePlugin
         int pageNumber, UIRequiredItemSelectPage itemSelectPage)
     {
         var isBag = pageNumber == 0;
-        //TODO: The user could not be english so grab the text from the games actual holder 
         // Change the text of the storage header to either Bag or Storage for user experience 
         var headerText =
             itemSelectPage.bagGroup.gameObject.transform.FindChild("HeaderText")
@@ -729,8 +728,7 @@ public class CraftFromStorage : BasePlugin
 
         // This is to ensure other languages can show correct text
         var storageText = LanguageManager.Instance.GetLocalizeText(LocalizeTextTableType.PageHeaderText, 113020);
-        var inventoryText = LanguageManager.Instance.GetLocalizeText(LocalizeTextTableType.PageHeaderText, 108000);
-
+        var inventoryText = LanguageManager.Instance.GetLocalizeText(LocalizeTextTableType.SubHeadingText, 100000);
 
         headerText?.SetText(isBag ? inventoryText : storageText);
 
