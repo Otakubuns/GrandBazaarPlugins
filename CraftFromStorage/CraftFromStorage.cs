@@ -59,7 +59,7 @@ public class CraftFromStorage : BasePlugin
             foreach (var itemData in useItemList)
             {
                 if (itemData == null) continue;
-                
+
                 var required = remaining * itemData.Stack;
 
                 if (itemData.Storage is not StorageManager storage) continue;
@@ -108,117 +108,116 @@ public class CraftFromStorage : BasePlugin
             WindmillCraftingManager __instance, WindmillCraftingMasterData recipe, int count, int qualityValue,
             Il2CppSystem.Collections.Generic.List<SlotItemData> useItemList, NiceParts niceParts)
         {
-           
-                if (__instance == null || recipe == null) return true;
-                
-                var saveData = __instance.saveData;
-                if (saveData == null) return true;
-        
-                var slotList = saveData.WindmillTotalDataList;
-                var craftingType = __instance.CraftingType;
-                
-                if (slotList == null || (int)craftingType >= slotList.Count) return true;
-                
-                var slotData = slotList[(int)craftingType];
-                if (slotData == null) return true;
-        
-                var inventory = InventoryManager.Instance;
-                if (inventory == null) return true;
-        
-                var bag = inventory.BagItemStorage;
-                var toolStorage = inventory.BagToolStorage;
-        
-                var craftingData = new WindmillCraftingManager.CraftingData
-                {
-                    recipeDataId = recipe.Id,
-                    craftCnt = count,
-                    qualityValue = qualityValue,
-                    materialList = new Il2CppSystem.Collections.Generic.List<ItemData>()
-                };
+            if (__instance == null || recipe == null) return true;
+
+            var saveData = __instance.saveData;
+            if (saveData == null) return true;
+
+            var slotList = saveData.WindmillTotalDataList;
+            var craftingType = __instance.CraftingType;
+
+            if (slotList == null || (int) craftingType >= slotList.Count) return true;
+
+            var slotData = slotList[(int) craftingType];
+            if (slotData == null) return true;
+
+            var inventory = InventoryManager.Instance;
+            if (inventory == null) return true;
+
+            var bag = inventory.BagItemStorage;
+            var toolStorage = inventory.BagToolStorage;
+
+            var craftingData = new WindmillCraftingManager.CraftingData
+            {
+                recipeDataId = recipe.Id,
+                craftCnt = count,
+                qualityValue = qualityValue,
+                materialList = new Il2CppSystem.Collections.Generic.List<ItemData>()
+            };
 
 
-                if (__instance.parts != null &&
-                    __instance.parts.TryGetValue(niceParts, out var nicePart))
-                    craftingData.craftCnt = nicePart.GetCraftCount(count);
-                else
-                    craftingData.craftCnt = count;
-                
-                craftingData.niceParts = (int)niceParts;
-                
-                var dateManager = DateManager.Instance;          
-                var weatherManager = WeatherManager.Instance;
-                
-                if (dateManager == null || weatherManager == null) return true;
-                var currentDateTime = dateManager.Now;
-                var windLevel = weatherManager.TodayWindLevel;
-        
-                craftingData.EndTimeTicks = WindmillCraftingMaster.GetCraftEndTimeTicks(
-                    currentDateTime,
-                    recipe.Time,
-                    windLevel,
-                    __instance.GetNiceParts(craftingType),
-                    count
-                );
-                
-                if (count > 1  && useItemList != null)
+            if (__instance.parts != null &&
+                __instance.parts.TryGetValue(niceParts, out var nicePart))
+                craftingData.craftCnt = nicePart.GetCraftCount(count);
+            else
+                craftingData.craftCnt = count;
+
+            craftingData.niceParts = (int) niceParts;
+
+            var dateManager = DateManager.Instance;
+            var weatherManager = WeatherManager.Instance;
+
+            if (dateManager == null || weatherManager == null) return true;
+            var currentDateTime = dateManager.Now;
+            var windLevel = weatherManager.TodayWindLevel;
+
+            craftingData.EndTimeTicks = WindmillCraftingMaster.GetCraftEndTimeTicks(
+                currentDateTime,
+                recipe.Time,
+                windLevel,
+                __instance.GetNiceParts(craftingType),
+                count
+            );
+
+            if (count > 1 && useItemList != null)
+            {
+                foreach (var slotItem in useItemList)
                 {
-                    foreach (var slotItem in useItemList)
+                    if (slotItem == null || slotItem.IsTool) continue;
+
+                    int required = (count - 1) * slotItem.Stack;
+                    if (required <= 0) continue;
+
+                    if (slotItem.Storage is not StorageManager storage) continue;
+
+                    if (!CraftingHelper.StorageTryUse(storage, slotItem.Slot, required, out int leftover))
                     {
-                        if (slotItem == null || slotItem.IsTool) continue;
-                        
-                        int required = (count - 1) * slotItem.Stack;
-                        if (required <= 0) continue;
-        
-                        if (slotItem.Storage is not StorageManager storage) continue;
-                        
-                        if (!CraftingHelper.StorageTryUse(storage, slotItem.Slot, required, out int leftover))
+                        if (leftover > 0)
                         {
-                            if (leftover > 0)
+                            var clone = Clone(slotItem);
+                            if (clone != null)
                             {
-                                var clone = Clone(slotItem);
-                                if (clone != null)
-                                {
-                                    clone.Stack = leftover;
-                                    storage.Add(clone, out _);
-                                }
+                                clone.Stack = leftover;
+                                storage.Add(clone, out _);
                             }
                         }
                     }
                 }
-                
-                if (useItemList != null)
+            }
+
+            if (useItemList != null)
+            {
+                foreach (var slotItem in useItemList)
                 {
-                    foreach (var slotItem in useItemList)
+                    if (slotItem == null) continue;
+
+                    if (!slotItem.IsTool)
                     {
-                        if (slotItem == null) continue;
-        
-                        if (!slotItem.IsTool)
-                        {
-                            var clone = Clone(slotItem);
-                            if (clone == null) continue;
-                            
-                            craftingData.materialList.Add(clone);
-                        }
-                        else
-                        {
-                            var tool = toolStorage?.PutOut(slotItem);
-                            if (tool == null) continue;
-        
-                            if (tool.Category == 4)
-                                ToolManager.Instance?.EmptyWateringPot();
-        
-                            craftingData.materialList.Add(tool);
-                        }
+                        var clone = Clone(slotItem);
+                        if (clone == null) continue;
+
+                        craftingData.materialList.Add(clone);
+                    }
+                    else
+                    {
+                        var tool = toolStorage?.PutOut(slotItem);
+                        if (tool == null) continue;
+
+                        if (tool.Category == 4)
+                            ToolManager.Instance?.EmptyWateringPot();
+
+                        craftingData.materialList.Add(tool);
                     }
                 }
-        
-                if (recipe.ToolType == ToolType.FishingRod)
-                    bag?.ResetFishinBait();
-        
-                slotData.craftingDataList.Add(craftingData);
-                saveData.UpdateCraftingList();
-                __instance.UpdateNextCompletionTime();
-                
+            }
+
+            if (recipe.ToolType == ToolType.FishingRod)
+                bag?.ResetFishinBait();
+
+            slotData.craftingDataList.Add(craftingData);
+            saveData.UpdateCraftingList();
+            __instance.UpdateNextCompletionTime();
+
             return false;
         }
 
@@ -448,7 +447,9 @@ public class CraftFromStorage : BasePlugin
          * This patch updates the text for the selected item to show the amount in storage too(in vanilla it counts all items by id too)
          */
         [HarmonyPatch(typeof(UIRequiredItemIcon))]
-        [HarmonyPatch("Setup", new Type[] {typeof(BagItemStorageManager), typeof(RequiredItemData), 
+        [HarmonyPatch("Setup", new Type[]
+        {
+            typeof(BagItemStorageManager), typeof(RequiredItemData),
             typeof(int), typeof(UIRequiredItemIcon.State)
         })]
         [HarmonyPostfix]
@@ -683,7 +684,7 @@ public class CraftFromStorage : BasePlugin
             headerClone.GetChild(0).FindChild("UIKeyArrowRight").FindChild("UIKeyIcon")
                 .SetName("UIKeyStorageSelectItemRight");
         }
-        
+
         /*
          * This patch is how the games replaces the uiicons with the actual itemdata in the storage
          * It calls ItemDataListOverride to do most of the logic for abstraction
@@ -720,12 +721,18 @@ public class CraftFromStorage : BasePlugin
         int pageNumber, UIRequiredItemSelectPage itemSelectPage)
     {
         var isBag = pageNumber == 0;
+        //TODO: The user could not be english so grab the text from the games actual holder 
         // Change the text of the storage header to either Bag or Storage for user experience 
         var headerText =
             itemSelectPage.bagGroup.gameObject.transform.FindChild("HeaderText")
                 .GetComponent<LocalizedTextMeshPro>();
 
-        headerText?.SetText(isBag ? "Bag" : "Storage");
+        // This is to ensure other languages can show correct text
+        var storageText = LanguageManager.Instance.GetLocalizeText(LocalizeTextTableType.PageHeaderText, 113020);
+        var inventoryText = LanguageManager.Instance.GetLocalizeText(LocalizeTextTableType.PageHeaderText, 108000);
+
+
+        headerText?.SetText(isBag ? inventoryText : storageText);
 
         var bagStorage = InventoryManager.Instance.BagItemStorage;
         var houseStorage = InventoryManager.Instance.HouseStorage;

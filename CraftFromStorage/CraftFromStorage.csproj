@@ -42,12 +42,6 @@
             <HintPath>..\..\library\UnityEngine.UI.dll</HintPath>
         </Reference>
     </ItemGroup>
-    
-    <ItemGroup>
-      <ClCompile Include="CookingManager.Cookingb__6.c" />
-      <ClCompile Include="CookingManager.Cookingb__7.c" />
-      <ClCompile Include="CookingManagerCookingb__8.c" />
-    </ItemGroup>
 
     <Target Name="PostBuild" AfterTargets="PostBuildEvent">
         <Exec Command="xcopy /Y /F &quot;$(TargetDir)$(TargetName).dll&quot; &quot;C:\Program Files (x86)\Steam\steamapps\common\STORY OF SEASONS Grand Bazaar\BepInEx\plugins\CraftFromStorage&quot;" />
