@@ -43,7 +43,7 @@ public static class JsonUtility
      * Saves the given position to the JSON file under the specified slot.
      * If the slot already exists, it updates the position; otherwise, it adds a new entry.
      */
-    public static void SaveDataJson(Vector3 position, int slot)
+    public static void SaveDataJson(Vector3 position, int slot, uint fieldId)
     {
         try
         {
@@ -57,10 +57,11 @@ public static class JsonUtility
             if (existingData != null)
             {
                 existingData.Position = positionData;
+                existingData.FieldId = fieldId;
             }
             else
             {
-                saveDataList.Add(new SaveData {Slot = slot, Position = positionData});
+                saveDataList.Add(new SaveData {Slot = slot, Position = positionData, FieldId = fieldId});
             }
 
             // Ordering it by id so it's easier to read
@@ -99,12 +100,33 @@ public static class JsonUtility
 
         return new Vector3(0, 0, 0);
     }
+
+    public static uint LoadDataLocation(int slot)
+    {
+        try
+        {
+            var saveDataList = LoadSaveDatas();
+            var existingData = saveDataList.FirstOrDefault(data => data.Slot == slot);
+            if (existingData != null)
+            {
+                return existingData.FieldId;
+            }
+        }
+        catch (Exception e)
+        {
+            SaveAnywhere.LOG.LogError("Failed to load data from JSON: " + e.Message);
+        }
+
+        return 0;
+    }
 }
 
 public class SaveData
 {
     public int Slot { get; init; }
     public Vector3Data Position { get; set; }
+    
+    public uint FieldId { get; set; }
 }
 
 public class Vector3Data
