@@ -240,11 +240,15 @@ public class CraftFromStorage : BasePlugin
             var itemSelectorScale = cookingItemSelector.GetComponent<RectTransform>();
             itemSelectorScale.sizeDelta =
                 new Vector2(itemSelectorScale.sizeDelta.x, itemSelectorScale.sizeDelta.y + 90);
-            cookingItemSelector.transform.position += new Vector3(0, 0.07f, 0);
+            //cookingItemSelector.transform.position += new Vector3(0, 0.07f, 0);
+            cookingItemSelector.GetComponent<RectTransform>().anchoredPosition += new Vector2(0, 50f);
 
             // Moves the icon and category up slightly to compensate for the space taken by the storage text
-            __instance.cookingDetail.icon.transform.position += new Vector3(0, 0.04f, 0);
-            __instance.cookingDetail.categoryDetail.transform.position += new Vector3(0, 0.10f, 0);
+            // __instance.cookingDetail.icon.transform.position += new Vector3(0, 0.04f, 0);
+            __instance.cookingDetail.icon.rectTransform.anchoredPosition += new Vector2(0, 35f);
+            //__instance.cookingDetail.categoryDetail.transform.position += new Vector3(0, 0.10f, 0);
+            __instance.cookingDetail.categoryDetail.GetComponent<RectTransform>().anchoredPosition +=
+                new Vector2(0, 60f);
 
             // Group(Cooking)
             // Creating new icons for the storage amount text by copying the original ui element and placing underneath
@@ -278,22 +282,25 @@ public class CraftFromStorage : BasePlugin
             //just check the first one to see if its patched
             if (requiredItemSelector.requiredItemIcon._items[0].transform.FindChild("HaveStorageStackBG") !=
                 null) return;
-
+            
+            
             // Scales the box to fit the storage area
             var requiredItemsScale = requiredItemSelector.GetComponent<RectTransform>();
             requiredItemsScale.sizeDelta =
-                new Vector2(requiredItemsScale.sizeDelta.x, requiredItemsScale.sizeDelta.y + 90);
-            requiredItemSelector.transform.position += new Vector3(0, 0.07f, 0);
-
+                new Vector2(requiredItemsScale.sizeDelta.x, requiredItemsScale.sizeDelta.y + 50);
+            //requiredItemSelector.transform.position += new Vector3(0, 0.07f, 0);
+            requiredItemSelector.GetComponent<RectTransform>().anchoredPosition += new Vector2(0, 20f);
+            
             // Group(Windmill) holds the 5 icons and amount
             var groupGameObject = requiredItemSelector.transform.GetChild(1).gameObject;
             var groupScale = groupGameObject.GetComponent<RectTransform>();
             groupScale.anchoredPosition =
                 new Vector2(groupScale.anchoredPosition.x, groupScale.anchoredPosition.y + 45);
 
-            __instance.windmillCraftingDetail.icon.transform.position += new Vector3(0, 0.04f, 0);
-            __instance.windmillCraftingDetail.categoryDetail.transform.position += new Vector3(0, 0.15f, 0);
-
+            //__instance.windmillCraftingDetail.icon.transform.position += new Vector3(0, 0.04f, 0);
+            __instance.windmillCraftingDetail.icon.rectTransform.anchoredPosition += new Vector2(0, 15f);
+            //__instance.windmillCraftingDetail.categoryDetail.transform.position += new Vector3(0, 0.15f, 0);
+            __instance.windmillCraftingDetail.categoryDetail.GetComponent<RectTransform>().anchoredPosition += new Vector2(0, 40f);
             // Creating 5 new icons for the storage amount text by copying the original ui element and placing underneath
             CraftingUI.AddStorageStackBg(requiredItemSelector.requiredItemIcon);
         }
@@ -399,50 +406,6 @@ public class CraftFromStorage : BasePlugin
             }
         }
 
-        //Commented out as AddGamePadInputCallback works
-        // [HarmonyPatch(typeof(Input), "GetKeyDown", new Type[] {typeof(UnityEngine.KeyCode)})]
-        // [HarmonyPostfix]
-        // private static void PatchInputStorageTab(bool __result, UnityEngine.KeyCode key)
-        // {
-        //     if (!__result) return;
-        //
-        //     if (key != KeyCode.Q && key != KeyCode.E) return;
-        //
-        //     if (UIAccessor.Instance == null) return;
-        //
-        //     UILoadKey currentKey;
-        //
-        //     // Trying to grab it sometimes comes with "NullException" if too early so catching it to avoid the errors
-        //     try {
-        //         currentKey = UIAccessor.Instance.CurrentUIKey;
-        //     }
-        //     catch {
-        //         return;
-        //     }
-        //
-        //     if (currentKey != UILoadKey.RequiredItemSelect) return;
-        //
-        //     switch (key)
-        //     {
-        //         case KeyCode.Q:
-        //         {
-        //             _log.LogInfo("Q pressed");
-        //             var uiIconKey = Resources.FindObjectsOfTypeAll<UIKeyIcon>()
-        //                 .FirstOrDefault(storage => storage.name == "UIKeyStorageSelectItemLeft");
-        //
-        //             uiIconKey?.BokuMono_UI_ITouchable_InputTouch(ITouchable.InputState.Down, Vector2.zero, null);
-        //             break;
-        //         }
-        //         case KeyCode.E:
-        //         {
-        //             var uiIconKey = Resources.FindObjectsOfTypeAll<UIKeyIcon>()
-        //                 .FirstOrDefault(storage => storage.name == "UIKeyStorageSelectItemRight");
-        //
-        //             uiIconKey?.BokuMono_UI_ITouchable_InputTouch(ITouchable.InputState.Down, Vector2.zero, null);
-        //             break;
-        //         }
-        //     }
-
         /*
          * This patch updates the text for the selected item to show the amount in storage too(in vanilla it counts all items by id too)
          */
@@ -464,7 +427,8 @@ public class CraftFromStorage : BasePlugin
             //item_icon_110201
             if (!uint.TryParse(itemSelectedString, out var itemSelectedID)) return;
 
-            var amount = CraftingHelper.CountInAllStorages(data => data.ItemId == itemSelectedID);
+            var amount =
+                CraftingHelper.CountInAllStorages(data => data.ItemId == itemSelectedID && data.IsCorruption == false);
             __instance.havedStackText.text = amount.ToString();
         }
 

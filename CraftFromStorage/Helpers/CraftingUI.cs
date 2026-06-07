@@ -13,7 +13,8 @@ public static class CraftingUI
             var bagUiElement = uiRequiredItemIcon.transform.FindChild("HavedStackBG").gameObject;
             var storageStackBg = Object.Instantiate(bagUiElement, uiRequiredItemIcon.transform, true);
             storageStackBg.name = "HaveStorageStackBG";
-            storageStackBg.transform.position = bagUiElement.transform.position + new Vector3(0, -0.07f, 0);
+            //storageStackBg.transform.position = bagUiElement.transform.position + new Vector3(0, -0.07f, 0);
+            storageStackBg.GetComponent<RectTransform>().anchoredPosition += new Vector2(0, -48f);
         }
     }
 }

@@ -36,22 +36,22 @@ public static class CraftingHelper
             {
                 case RequiredItemType.Item:
                     totalAmount = CountInAllStorages(x =>
-                        x != null && x.ItemId == itemId);
+                        x != null && x.ItemId == itemId && x.IsCorruption == false);
 
                     // Added check for irrefular and rare items(giant crops)
                     if (totalAmount < stack)
                     {
                         if (masterDataManager.CropMaster.TryGetIrregularId(itemId, out var irregularId))
-                            totalAmount += CountInAllStorages(x => x != null && x.ItemId == irregularId);
+                            totalAmount += CountInAllStorages(x => x != null && x.ItemId == irregularId && x.IsCorruption == false);
                         else if (masterDataManager.FarmAnimalMaster.TryGetRareId(itemId, out var rareId))
-                            totalAmount += CountInAllStorages(x => x != null && x.ItemId == rareId);
+                            totalAmount += CountInAllStorages(x => x != null && x.ItemId == rareId && x.IsCorruption == false);
                     }
 
                     break;
 
                 case RequiredItemType.Category:
                     totalAmount = CountInAllStorages(x =>
-                        x != null && x.Category == itemId);
+                        x != null && x.Category == itemId && x.IsCorruption == false);
                     break;
 
                 case RequiredItemType.Group:
@@ -61,12 +61,12 @@ public static class CraftingHelper
                     {
                         if (requiredItem == 0) continue;
 
-                        totalAmount += CountInAllStorages(x => x != null && x.ItemId == requiredItem);
+                        totalAmount += CountInAllStorages(x => x != null && x.ItemId == requiredItem && x.IsCorruption == false);
 
                         if (masterDataManager.CropMaster.TryGetIrregularId(requiredItem, out var irregularId))
-                            totalAmount += CountInAllStorages(x => x != null && x.ItemId == irregularId);
+                            totalAmount += CountInAllStorages(x => x != null && x.ItemId == irregularId && x.IsCorruption == false);
                         else if (masterDataManager.FarmAnimalMaster.TryGetRareId(requiredItem, out var rareId))
-                            totalAmount += CountInAllStorages(x => x != null && x.ItemId == rareId);
+                            totalAmount += CountInAllStorages(x => x != null && x.ItemId == rareId && x.IsCorruption == false);
                     }
 
                     break;
@@ -90,15 +90,15 @@ public static class CraftingHelper
         var totalAmount = 0;
         foreach (var itemId in itemIds)
         {
-            totalAmount += CountInStorage(x => x != null && x.ItemId == itemId);
+            totalAmount += CountInStorage(x => x != null && x.ItemId == itemId && x.IsCorruption == false);
 
             if (masterDataManager.CropMaster.TryGetIrregularId(itemId, out var irregularId))
             {
-                totalAmount += CountInStorage(x => x != null && x.ItemId == irregularId);
+                totalAmount += CountInStorage(x => x != null && x.ItemId == irregularId && x.IsCorruption == false);
             }
             else if (masterDataManager.FarmAnimalMaster.TryGetRareId(itemId, out var rareId))
             {
-                totalAmount += CountInStorage(x => x != null && x.ItemId == rareId);
+                totalAmount += CountInStorage(x => x != null && x.ItemId == rareId && x.IsCorruption == false);
             }
         }
 
@@ -245,7 +245,7 @@ public static class CraftingHelper
             if (ids == null) continue;
             foreach (var id in ids)
             {
-                var isThereItem = CountInStorage(x => x.ItemId == id);
+                var isThereItem = CountInStorage(x => x.ItemId == id && x.IsCorruption == false);
                 if (isThereItem >= amountNeeded) isEnough = false;
             }
         }
