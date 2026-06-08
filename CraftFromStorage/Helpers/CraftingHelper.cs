@@ -173,8 +173,6 @@ public static class CraftingHelper
         return inventoryManager.BagItemStorage.itemDatas
                    .Where(predicate).Sum(x => x.Stack)
                + inventoryManager.HouseStorage.itemDatas
-                   .Where(predicate).Sum(x => x.Stack)
-               + inventoryManager.BagToolStorage.itemDatas
                    .Where(predicate).Sum(x => x.Stack);
     }
 
