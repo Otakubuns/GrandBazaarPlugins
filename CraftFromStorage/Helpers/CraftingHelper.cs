@@ -1,9 +1,11 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.Serialization;
 using BokuMono;
 using BokuMono.Data;
 using Il2CppInterop.Runtime.InteropTypes.Arrays;
-using Il2CppSystem.Collections.Generic;
+using UnityEngine;
 
 namespace CraftFromStorage.Helpers;
 
@@ -21,70 +23,112 @@ public static class CraftingHelper
     {
         var masterDataManager = MasterDataManager.Instance;
         if (masterDataManager == null) return false;
+        var usedItems = new Il2CppSystem.Collections.Generic.Dictionary<uint, int>();
 
         for (var i = 0; i < itemMasterData.RequiredItemCount; i++)
         {
             var itemData = itemMasterData.RequiredItemList._items[i].ToString().Split(',');
+            if (itemData.Length < 2) continue;
             var itemId = itemMasterData.GetRequiredItemId(i);
             var stack = int.Parse(itemData[1].Trim(' ', ')'));
             var category = itemMasterData.RequiredItemTypeList._items[i];
 
             if (itemId == 0 || stack == 0) continue;
 
-            var totalAmount = 0;
             switch (category)
             {
                 case RequiredItemType.Item:
-                    totalAmount = CountInAllStorages(x =>
-                        x != null && x.ItemId == itemId && x.IsCorruption == false);
-
-                    // Added check for irrefular and rare items(giant crops)
-                    if (totalAmount < stack)
+                    var remaining = stack - TakeFromStorage(itemId, stack, usedItems);
+                    if (remaining > 0)
                     {
-                        if (masterDataManager.CropMaster.TryGetIrregularId(itemId, out var irregularId))
-                            totalAmount += CountInAllStorages(x => x != null && x.ItemId == irregularId && x.IsCorruption == false);
-                        else if (masterDataManager.FarmAnimalMaster.TryGetRareId(itemId, out var rareId))
-                            totalAmount += CountInAllStorages(x => x != null && x.ItemId == rareId && x.IsCorruption == false);
+                        var variantId = GetVariantId(itemId);
+                        if (variantId == 0 || TakeFromStorage(variantId, remaining, usedItems) < remaining)
+                            return false;
                     }
 
                     break;
 
                 case RequiredItemType.Category:
-                    totalAmount = CountInAllStorages(x =>
-                        x != null && x.Category == itemId && x.IsCorruption == false);
+                    if (CountAvailable(itemId, usedItems) < stack) return false;
+                    usedItems.TryGetValue(itemId, out var usedCat);
+                    usedItems[itemId] = usedCat + stack;
                     break;
 
                 case RequiredItemType.Group:
                     itemMasterData.GroupMaster.TryGetGroupData(itemId, out var groupData);
+                    var groupRemaining = stack;
 
                     foreach (var requiredItem in groupData.RequiredItemIdList)
                     {
-                        if (requiredItem == 0) continue;
+                        if (requiredItem == 0 || groupRemaining <= 0) continue;
+                        groupRemaining -= TakeFromStorage(requiredItem, groupRemaining, usedItems);
 
-                        totalAmount += CountInAllStorages(x => x != null && x.ItemId == requiredItem && x.IsCorruption == false);
+                        if (groupRemaining <= 0) break;
 
-                        if (masterDataManager.CropMaster.TryGetIrregularId(requiredItem, out var irregularId))
-                            totalAmount += CountInAllStorages(x => x != null && x.ItemId == irregularId && x.IsCorruption == false);
-                        else if (masterDataManager.FarmAnimalMaster.TryGetRareId(requiredItem, out var rareId))
-                            totalAmount += CountInAllStorages(x => x != null && x.ItemId == rareId && x.IsCorruption == false);
+                        var variantId = GetVariantId(requiredItem);
+                        if (variantId != 0)
+                            groupRemaining -= TakeFromStorage(variantId, groupRemaining, usedItems);
                     }
 
+                    if (groupRemaining > 0) return false;
                     break;
             }
-
-            if (totalAmount < stack)
-                return false;
         }
 
         return true;
     }
 
     /// <summary>
+    /// Counts the available amount of an item in all storages,using useItems to account for already used items
+    /// </summary>
+    /// <param name="itemId"></param>
+    /// <param name="usedItems"></param>
+    /// <returns></returns>
+    private static int CountAvailable(uint itemId, Il2CppSystem.Collections.Generic.Dictionary<uint, int> usedItems)
+    {
+        usedItems.TryGetValue(itemId, out var used);
+        return CountInAllStorages(x => x != null && x.ItemId == itemId && x.IsCorruption == false) - used;
+    }
+
+    /// <summary>
+    /// A kind-of implementation of original TryUse, using a usedItems dictonary instead
+    /// </summary>
+    /// <param name="itemId"></param>
+    /// <param name="amount"></param>
+    /// <param name="usedItems"></param>
+    /// <returns>the amount deducted, so it can be used later so duplicates aren't counted</returns>
+    private static int TakeFromStorage(uint itemId, int amount,
+        Il2CppSystem.Collections.Generic.Dictionary<uint, int> usedItems)
+    {
+        var available = CountAvailable(itemId, usedItems);
+        var taken = Math.Min(available, amount);
+        if (taken <= 0) return taken;
+        usedItems.TryGetValue(itemId, out var used);
+        usedItems[itemId] = used + taken;
+        return taken;
+    }
+
+    /// <summary>
+    /// Gets the ids of the rare or irregular variant of an item (ex. tomato can be giant tomato)
+    /// </summary>
+    /// <param name="itemId">the id of the item to check for rare & irregular</param>
+    /// <returns>id of irregular or rare item. 0 if there isn't one</returns>
+    private static uint GetVariantId(uint itemId)
+    {
+        if (MasterDataManager.Instance.CropMaster.TryGetIrregularId(itemId, out var irregularId))
+            return irregularId;
+        if (MasterDataManager.Instance.FarmAnimalMaster.TryGetRareId(itemId, out var rareId))
+            return rareId;
+        return 0;
+    }
+
+
+    /// <summary>
     /// Return the amount of multiple items in storage only.
     /// </summary>
     /// <param name="itemIds">List of item ids to check.</param>
     /// <returns>Total amount found.</returns>
-    public static int GetStorageAmount(List<uint> itemIds)
+    public static int GetStorageAmount(Il2CppSystem.Collections.Generic.List<uint> itemIds)
     {
         var masterDataManager = MasterDataManager.Instance;
         var totalAmount = 0;
@@ -154,7 +198,8 @@ public static class CraftingHelper
     /// <param name="currentRequiredItem">List of required items ids to craft</param>
     /// <param name="stack">Amount needed to craft</param>
     /// <returns>ItemData of the found item</returns>
-    public static ItemData GetItemDataFromStorage(List<uint> currentRequiredItem, int stack)
+    public static ItemData GetItemDataFromStorage(Il2CppSystem.Collections.Generic.List<uint> currentRequiredItem,
+        int stack)
     {
         var houseStorage = ManagedSingleton<InventoryManager>.Instance.HouseStorage;
         foreach (var itemData in houseStorage.itemDatas)
@@ -171,7 +216,7 @@ public static class CraftingHelper
     }
 
     /// <summary>
-    /// Gets the maximum times a recipe can be crafted based on the required items and their amounts in storage and bag.
+    /// Gets max craft amount, copying vanilla approach with housestorage added
     /// </summary>
     /// <param name="requiredItemList">List of items required to craft</param>
     /// <returns>Maximum amount that can be crafted.</returns>
@@ -179,54 +224,18 @@ public static class CraftingHelper
     {
         try
         {
-            var required = new System.Collections.Generic.Dictionary<(bool isBag, int slot), int>();
+            var bagClone = BagItemStorageManager.Clone(InventoryManager.Instance.BagItemStorage);
+            var houseClone = CloneHouseStorage(InventoryManager.Instance.HouseStorage);
 
-            foreach (var item in requiredItemList)
-            {
-                if (item == null) continue;
-
-                foreach (var selectedItem in item.SelectedItems)
-                {
-                    if (selectedItem.ItemId == 0) continue;
-
-                    var key = (
-                        selectedItem.Storage is BagItemStorageManager,
-                        selectedItem.Slot
-                    );
-
-                    required[key] = required.TryGetValue(key, out var current)
-                        ? current + item.Stack
-                        : item.Stack;
-                }
-            }
-
-            if (required.Count == 0) return 1;
-
-            var minCraftable = int.MaxValue;
-
-            foreach (var (key, needed) in required)
-            {
-                var (isBag, slot) = key;
-
-                var storageAmount = isBag
-                    ? InventoryManager.Instance.BagItemStorage.GetStack(slot)
-                    : InventoryManager.Instance.HouseStorage.GetStack(slot);
-
-                var max = storageAmount / needed;
-
-                if (max < minCraftable)
-                    minCraftable = max;
-            }
-
-            return minCraftable == int.MaxValue ? 1 : minCraftable;
+            return TryCraft(requiredItemList, bagClone, houseClone, 1);
         }
         catch (Exception ex)
         {
-            CraftFromStorage._log.LogError($"Crafting Error: {ex}");
+            CraftFromStorage._log.LogError("Error calculating max craft amount: " + ex.Message);
             return 1;
         }
     }
-    
+
     /// <summary>
     /// Check if there are any other ingredients in other "tabs" for adapt(arrange) recipe
     /// </summary>
@@ -259,7 +268,7 @@ public static class CraftingHelper
     /// <param name="storage">The storage manager to use from.</param>
     /// <param name="slot">The item slot/index.</param>
     /// <param name="stack">The amount to reduce by.</param>
-    /// <param name="remaining">The amount reamining after reducing.</param>
+    /// <param name="remaining">The amount remaining after reducing.</param>
     /// <returns>True if the Item was successfully reduced</returns>
     public static bool StorageTryUse(StorageManager storage, int slot, int stack, out int remaining)
     {
@@ -271,9 +280,119 @@ public static class CraftingHelper
         if (slot < 0 || slot >= items.Length) return false;
 
         var targetItem = items[slot];
-
-        if (targetItem == null || targetItem.ItemId == 0) return false;
+        if (targetItem == null) return false;
 
         return targetItem.Reduce(stack, out remaining);
+    }
+
+    /// <summary>
+    /// Clone for houseStorage as there isn't one in vanilla code
+    /// </summary>
+    /// <param name="storage">the HouseSotrage to clone</param>
+    /// <returns>cloned storage</returns>
+    private static HouseStorageManager CloneHouseStorage(HouseStorageManager storage)
+    {
+        var clone = new HouseStorageManager();
+        var original = storage.ItemDatas;
+
+        for (var i = 0; i < original.Length; i++)
+            clone.ItemDatas[i] = original[i] != null ? ItemData.Clone(original[i]) : null;
+
+        return clone;
+    }
+
+
+    /// <summary>
+    /// Vanilla recreation of TryCraft to allow more than just ItemBagStorage, reduces the stack of items in cloned storage until it cannot craft anymore
+    /// </summary>
+    /// <param name="requiredItemList"></param>
+    /// <param name="bagClone"></param>
+    /// <param name="houseClone"></param>
+    /// <param name="count"></param>
+    /// <returns>The amount of times the item was reduced, always starting at 1</returns>
+    private static int TryCraft(Il2CppReferenceArray<RequiredItemData> requiredItemList, BagItemStorageManager bagClone,
+        HouseStorageManager houseClone, int count)
+    {
+        foreach (var item in requiredItemList)
+        {
+            if (item == null || item.SelectItemStack == 0) continue;
+
+            foreach (var selectedItem in item.SelectedItems)
+            {
+                var primaryStorage = selectedItem.Storage is BagItemStorageManager
+                    ? (StorageManager) bagClone
+                    : houseClone;
+
+                var secondaryStorage = selectedItem.Storage is BagItemStorageManager
+                    ? (StorageManager) houseClone
+                    : bagClone;
+
+                var primaryData = ItemData.Clone(selectedItem);
+
+                if (!IsHavedCombined(primaryData, primaryStorage, secondaryStorage))
+                    return count;
+
+                UseStorage(primaryData, primaryStorage);
+                if (primaryData.Stack > 0)
+                    UseStorage(primaryData, secondaryStorage);
+            }
+        }
+        
+        return TryCraft(requiredItemList, bagClone, houseClone, count + 1);
+    }
+
+    /// <summary>
+    /// Modded implementation of the original games Use, was having issues with stack reducing
+    /// </summary>
+    /// <param name="data"></param>
+    /// <param name="storage"></param>
+    public static void UseStorage(ItemData data, StorageManager storage)
+    {
+        var items = storage.ItemDatas;
+        if (items == null) return;
+
+        for (var i = 0; i < items.Length; i++)
+        {
+            if (data.Stack <= 0) break;
+            if (items[i] == null || !items[i].IsMatch(data)) continue;
+
+            StorageTryUse(storage, i, data.Stack, out var remaining);
+            data.Stack = remaining;
+        }
+    }
+    
+    /// <summary>
+    /// A modded approach to vanilla's IsHaved, checks if the combined amount of matching items in both storages is enough
+    /// </summary>
+    /// <param name="data">The item to check for, including the required stack amount.</param>
+    /// <param name="primary">The primary storage to check (bag or house).</param>
+    /// <param name="secondary">The secondary storage to also check (bag or house).</param>
+    /// <returns>True if the combined total from both storages is more or equal to required stack amount.</returns>
+    private static bool IsHavedCombined(ItemData data, StorageManager primary, StorageManager secondary)
+    {
+        var primaryCount = GetMatchingCount(data, primary);
+        var secondaryCount = GetMatchingCount(data, secondary);
+        return (primaryCount + secondaryCount) >= data.Stack;
+    }
+
+    /// <summary>
+    /// Gets the count of matching items in both storage(matching both quality and rotten status)
+    /// </summary>
+    /// <param name="data"></param>
+    /// <param name="storage"></param>
+    /// <returns></returns>
+    private static int GetMatchingCount(ItemData data, StorageManager storage)
+    {
+        var total = 0;
+        var items = storage.ItemDatas;
+        if (items == null) return 0;
+        foreach (var item in items)
+        {
+            if (item == null) continue;
+            if (item.IsMatch(data))
+                total += item.Stack;
+        }
+
+        return total;
     }
 }

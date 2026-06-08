@@ -49,26 +49,46 @@ public class CraftFromStorage : BasePlugin
 
             manager.CookedRecipe(recipe.Id);
 
-            var resultItem = CreateByQualityValue(recipe.CookedFood, count, quality, -1, 0);
+            var resultItem = CreateByQualityValue(recipe.CookedFood, count, quality);
 
             if (count <= 1) return true;
 
             //because the first count is already in useItemList we remove 1
             var remaining = count - 1;
 
+            var bagStorage = InventoryManager.Instance.BagItemStorage;
+            var houseStorage = InventoryManager.Instance.HouseStorage;
+
             foreach (var itemData in useItemList)
             {
                 if (itemData == null) continue;
 
                 var required = remaining * itemData.Stack;
+                var item = ItemData.Clone(itemData);
 
-                if (itemData.Storage is not StorageManager storage) continue;
-
-                if (!CraftingHelper.StorageTryUse(itemData.Storage, itemData.Slot, required, out var leftoverAmount))
+                if (itemData.Storage is BagItemStorageManager)
                 {
-                    var item = Clone(itemData);
-                    item.Stack = leftoverAmount;
-                    storage.Add(item, out _);
+                    var satisfied = bagStorage.TryUse(itemData.Slot, required, out var leftover);
+                    if (!satisfied)
+                    {
+                        item.Stack = leftover;
+                        bagStorage.Use(item); // drain remainder from bag
+                        if (item.Stack > 0)
+                            houseStorage.Use(item); // then house
+                    }
+                }
+                else
+                {
+                    // came from house storage
+                    var satisfied =
+                        CraftingHelper.StorageTryUse(houseStorage, itemData.Slot, required, out var leftover);
+                    if (!satisfied)
+                    {
+                        item.Stack = leftover;
+                        houseStorage.Use(item);
+                        if (item.Stack > 0)
+                            bagStorage.Use(item);
+                    }
                 }
             }
 
@@ -126,6 +146,7 @@ public class CraftFromStorage : BasePlugin
 
             var bag = inventory.BagItemStorage;
             var toolStorage = inventory.BagToolStorage;
+            var houseStorage = inventory.HouseStorage;
 
             var craftingData = new WindmillCraftingManager.CraftingData
             {
@@ -165,21 +186,30 @@ public class CraftFromStorage : BasePlugin
                 {
                     if (slotItem == null || slotItem.IsTool) continue;
 
-                    int required = (count - 1) * slotItem.Stack;
+                    var required = (count - 1) * slotItem.Stack;
                     if (required <= 0) continue;
 
-                    if (slotItem.Storage is not StorageManager storage) continue;
+                    var data = ItemData.Clone(slotItem);
+                    data.Stack = required;
 
-                    if (!CraftingHelper.StorageTryUse(storage, slotItem.Slot, required, out int leftover))
+                    if (slotItem.Storage is BagItemStorageManager)
                     {
-                        if (leftover > 0)
+                        if (!bag.TryUse(slotItem.Slot, required, out var leftover))
                         {
-                            var clone = Clone(slotItem);
-                            if (clone != null)
-                            {
-                                clone.Stack = leftover;
-                                storage.Add(clone, out _);
-                            }
+                            data.Stack = leftover;
+                            bag.Use(data);
+                            if (data.Stack > 0)
+                                CraftingHelper.UseStorage(data, houseStorage);
+                        }
+                    }
+                    else
+                    {
+                        if (!CraftingHelper.StorageTryUse(houseStorage, slotItem.Slot, required, out var leftover))
+                        {
+                            data.Stack = leftover;
+                            CraftingHelper.UseStorage(data, houseStorage);
+                            if (data.Stack > 0)
+                                bag.Use(data);
                         }
                     }
                 }
@@ -196,6 +226,7 @@ public class CraftFromStorage : BasePlugin
                         var clone = Clone(slotItem);
                         if (clone == null) continue;
 
+                        clone.Stack = count * slotItem.Stack;
                         craftingData.materialList.Add(clone);
                     }
                     else
@@ -282,15 +313,17 @@ public class CraftFromStorage : BasePlugin
             //just check the first one to see if its patched
             if (requiredItemSelector.requiredItemIcon._items[0].transform.FindChild("HaveStorageStackBG") !=
                 null) return;
-            
-            
+
+
             // Scales the box to fit the storage area
             var requiredItemsScale = requiredItemSelector.GetComponent<RectTransform>();
             requiredItemsScale.sizeDelta =
                 new Vector2(requiredItemsScale.sizeDelta.x, requiredItemsScale.sizeDelta.y + 50);
             //requiredItemSelector.transform.position += new Vector3(0, 0.07f, 0);
+            requiredItemSelector.transform.FindChild("Icon").GetComponent<RectTransform>().anchoredPosition +=
+                new Vector2(0, 20f);
             requiredItemSelector.GetComponent<RectTransform>().anchoredPosition += new Vector2(0, 20f);
-            
+
             // Group(Windmill) holds the 5 icons and amount
             var groupGameObject = requiredItemSelector.transform.GetChild(1).gameObject;
             var groupScale = groupGameObject.GetComponent<RectTransform>();
@@ -300,7 +333,8 @@ public class CraftFromStorage : BasePlugin
             //__instance.windmillCraftingDetail.icon.transform.position += new Vector3(0, 0.04f, 0);
             __instance.windmillCraftingDetail.icon.rectTransform.anchoredPosition += new Vector2(0, 15f);
             //__instance.windmillCraftingDetail.categoryDetail.transform.position += new Vector3(0, 0.15f, 0);
-            __instance.windmillCraftingDetail.categoryDetail.GetComponent<RectTransform>().anchoredPosition += new Vector2(0, 40f);
+            __instance.windmillCraftingDetail.categoryDetail.GetComponent<RectTransform>().anchoredPosition +=
+                new Vector2(0, 40f);
             // Creating 5 new icons for the storage amount text by copying the original ui element and placing underneath
             CraftingUI.AddStorageStackBg(requiredItemSelector.requiredItemIcon);
         }
@@ -327,7 +361,7 @@ public class CraftFromStorage : BasePlugin
         private static void OnSetRecipe(UIRequiredItemDetail __instance, IRequiredItemMasterData requiredItemData)
         {
             if (__instance == null) return;
-            var inventoryManager = ManagedSingleton<InventoryManager>.Instance;
+            var inventoryManager = InventoryManager.Instance;
             if (inventoryManager == null) return;
 
             var requiredItemSelector = __instance.requiredItemSelector;
@@ -458,7 +492,8 @@ public class CraftFromStorage : BasePlugin
         private static void PatchMaxCraft(UIRequiredItemSelector __instance, ref int __result)
         {
             // Add one for the initial craft amount in slotitemdata(real trycraft also has a count parameter that starts at 1)
-            var amount = CraftingHelper.GetMaxCraftAmount(__instance.requiredItems) + 1;
+            var amount = CraftingHelper.GetMaxCraftAmount(__instance.requiredItems);
+            _log.LogInfo($"Calculated max craft amount: {amount}");
             __result = amount;
         }
 
