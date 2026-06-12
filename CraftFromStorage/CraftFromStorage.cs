@@ -9,10 +9,10 @@ using BokuMono.UI;
 using CraftFromStorage.Helpers;
 using HarmonyLib;
 using Il2CppInterop.Runtime;
+using Il2CppSystem.Collections.Generic;
 using UnityEngine;
 using static BokuMono.Data.ItemData;
 using Action = Il2CppSystem.Action;
-using Math = System.Math;
 using Object = UnityEngine.Object;
 
 namespace CraftFromStorage;
@@ -58,37 +58,28 @@ public class CraftFromStorage : BasePlugin
 
             var bagStorage = InventoryManager.Instance.BagItemStorage;
             var houseStorage = InventoryManager.Instance.HouseStorage;
-
+            
             foreach (var itemData in useItemList)
             {
                 if (itemData == null) continue;
 
                 var required = remaining * itemData.Stack;
-                var item = ItemData.Clone(itemData);
+                var item = Clone(itemData);
+                item.Stack = required;
 
                 if (itemData.Storage is BagItemStorageManager)
                 {
                     var satisfied = bagStorage.TryUse(itemData.Slot, required, out var leftover);
-                    if (!satisfied)
-                    {
-                        item.Stack = leftover;
-                        bagStorage.Use(item); // drain remainder from bag
-                        if (item.Stack > 0)
-                            houseStorage.Use(item); // then house
-                    }
+                    if (satisfied) continue;
+                    item.Stack = leftover;
+                    houseStorage.Use(item);
                 }
                 else
                 {
-                    // came from house storage
-                    var satisfied =
-                        CraftingHelper.StorageTryUse(houseStorage, itemData.Slot, required, out var leftover);
-                    if (!satisfied)
-                    {
-                        item.Stack = leftover;
-                        houseStorage.Use(item);
-                        if (item.Stack > 0)
-                            bagStorage.Use(item);
-                    }
+                    var satisfied = CraftingHelper.StorageTryUse(houseStorage, itemData.Slot, required, out var leftover);
+                    if (satisfied) continue;
+                    item.Stack = leftover;
+                    bagStorage.Use(item);
                 }
             }
 
@@ -96,7 +87,7 @@ public class CraftFromStorage : BasePlugin
             var player = GameController.Instance?.playerCharacter;
             if (player == null) return false;
 
-            player.ReadyActionRaise(true);
+            player.ReadyActionRaise();
 
             //b__7 handles the animations and freeing the character after cooking
             var onClose = __instance.__9__7 ?? (__instance.__9__7 =
@@ -113,7 +104,7 @@ public class CraftFromStorage : BasePlugin
                 (System.Action) locals2._Cooking_b__8
             );
 
-            player.ActionRaise(PlayerRaise.RaiseType.Cooking, resultItem.Master, onClose, onConfirm, false);
+            player.ActionRaise(PlayerRaise.RaiseType.Cooking, resultItem.Master, onClose, onConfirm);
 
             return false;
         }
@@ -126,7 +117,7 @@ public class CraftFromStorage : BasePlugin
         [HarmonyPrefix]
         private static bool PatchWindmillCrafting(
             WindmillCraftingManager __instance, WindmillCraftingMasterData recipe, int count, int qualityValue,
-            Il2CppSystem.Collections.Generic.List<SlotItemData> useItemList, NiceParts niceParts)
+            List<SlotItemData> useItemList, NiceParts niceParts)
         {
             if (__instance == null || recipe == null) return true;
 
@@ -153,7 +144,7 @@ public class CraftFromStorage : BasePlugin
                 recipeDataId = recipe.Id,
                 craftCnt = count,
                 qualityValue = qualityValue,
-                materialList = new Il2CppSystem.Collections.Generic.List<ItemData>()
+                materialList = new List<ItemData>()
             };
 
 
@@ -189,7 +180,7 @@ public class CraftFromStorage : BasePlugin
                     var required = (count - 1) * slotItem.Stack;
                     if (required <= 0) continue;
 
-                    var data = ItemData.Clone(slotItem);
+                    var data = Clone(slotItem);
                     data.Stack = required;
 
                     if (slotItem.Storage is BagItemStorageManager)
@@ -339,6 +330,7 @@ public class CraftFromStorage : BasePlugin
             CraftingUI.AddStorageStackBg(requiredItemSelector.requiredItemIcon);
         }
 
+        //Freshness value 0 = rotten
         /*
          * This patch makes the recipe icons to be craftable if the items are in storage
          */
@@ -367,6 +359,8 @@ public class CraftFromStorage : BasePlugin
             var requiredItemSelector = __instance.requiredItemSelector;
             if (requiredItemSelector == null) return;
 
+            var houseClone = CraftingHelper.CloneHouseStorage(InventoryManager.Instance.HouseStorage);
+            
             for (var i = 0; i < requiredItemSelector.requiredItemIcon._size; i++)
             {
                 LocalizedTextMeshPro textMesh;
@@ -386,57 +380,34 @@ public class CraftFromStorage : BasePlugin
                 // if the required item data is null, clear it so when clicking on an unlearned recipe it doesn't show old data
                 if (requiredItemData == null || requiredItemSelector.requiredItems[i] == null)
                 {
-                    textMesh.text = "";
+                    textMesh.SetEmpty();
                     continue;
                 }
 
-                var itemIds = requiredItemSelector.requiredItems[i]?.ids;
-                var stack = __instance.requiredItemSelector.requiredItems[i]!.Stack;
+                var requiredItem = requiredItemSelector.requiredItems[i];
+                var itemIds = requiredItem.ids;
+                var stack = requiredItem.Stack;
 
-                if (itemIds!._size <= 0 || stack == 0)
+                if (itemIds == null || itemIds!._size <= 0 || stack == 0)
                 {
-                    textMesh.text = "";
+                    textMesh.SetEmpty();
                     continue;
                 }
 
-                var storageAmount =
-                    CraftingHelper.GetStorageAmount(itemIds);
-
-                for (var j = 0; j < i; j++)
-                {
-                    try
-                    {
-                        if (j == i) continue;
-                        var priorItemIds = requiredItemSelector.requiredItems[j]?.ids;
-                        var priorItemStack = __instance.requiredItemSelector.requiredItems[j]!.Stack;
-
-                        if (priorItemIds!._items.Where(id => id != 0)
-                            .Any(priorItemId => itemIds._items.Contains(priorItemId)))
-                        {
-                            storageAmount = Math.Max(0, storageAmount - priorItemStack);
-                            break;
-                        }
-                    }
-                    catch (Exception e)
-                    {
-                        continue;
-                    }
-                }
-
-
+                // Helper functiom that countsd and also consumes from cloned houseStorage
+                var storageAmount = CraftingHelper.CountAndConsumeFromStorage(houseClone, requiredItem);
+                
                 if (storageAmount >= stack)
-                {
                     requiredItemSelector.requiredItemIcon._items[i].checkIcon.enabled = true;
-                }
 
-                // if amount is over 999 just show 999+
+                // if amount is over 999 just show 999+ to prevent it from looking cramped
                 if (storageAmount > 999)
                 {
-                    textMesh.text = "999+";
+                    textMesh.SetText("999+");
                     continue;
                 }
 
-                textMesh.text = storageAmount.ToString();
+                textMesh.SetCount(storageAmount);
             }
         }
 
@@ -444,11 +415,7 @@ public class CraftFromStorage : BasePlugin
          * This patch updates the text for the selected item to show the amount in storage too(in vanilla it counts all items by id too)
          */
         [HarmonyPatch(typeof(UIRequiredItemIcon))]
-        [HarmonyPatch("Setup", new Type[]
-        {
-            typeof(BagItemStorageManager), typeof(RequiredItemData),
-            typeof(int), typeof(UIRequiredItemIcon.State)
-        })]
+        [HarmonyPatch("Setup", typeof(BagItemStorageManager), typeof(RequiredItemData), typeof(int), typeof(UIRequiredItemIcon.State))]
         [HarmonyPostfix]
         private static void PatchIconSetup(UIRequiredItemIcon __instance, BagItemStorageManager cloneBagMgr,
             RequiredItemData requiredItemData, int quality, UIRequiredItemIcon.State state)
@@ -456,14 +423,16 @@ public class CraftFromStorage : BasePlugin
             if (state != UIRequiredItemIcon.State.Normal ||
                 UIAccessor.Instance.CurrentUIKey != UILoadKey.RequiredItemSelect) return;
 
-            var itemSelectedString = requiredItemData.IconId.Replace("item_icon_", "");
-
-            //item_icon_110201
-            if (!uint.TryParse(itemSelectedString, out var itemSelectedID)) return;
-
-            var amount =
-                CraftingHelper.CountInAllStorages(data => data.ItemId == itemSelectedID && data.IsCorruption == false);
-            __instance.havedStackText.text = amount.ToString();
+            var count = 0;
+            foreach (var selectedItem in requiredItemData.SelectedItems)
+            {
+                count += CraftingHelper.CountInAllStorages(x => x != null &&
+                                                                x.IsConditions(selectedItem.ItemId,
+                                                                    selectedItem.Quality,
+                                                                    selectedItem.Freshness));
+            }
+            
+            __instance.havedStackText.SetCount(count);
         }
 
 
@@ -493,7 +462,6 @@ public class CraftFromStorage : BasePlugin
         {
             // Add one for the initial craft amount in slotitemdata(real trycraft also has a count parameter that starts at 1)
             var amount = CraftingHelper.GetMaxCraftAmount(__instance.requiredItems);
-            _log.LogInfo($"Calculated max craft amount: {amount}");
             __result = amount;
         }
 
@@ -507,12 +475,31 @@ public class CraftFromStorage : BasePlugin
         {
             // If index is 0 or less its bag so return
             if (__instance.SelectedParcelIndex <= 0) return;
+            if (data == null || data.IsError) return;
 
             //This is to grab the right item from storage since the index will start at 0 on new tabs
             var index = __instance.SelectedParcelIndex - 1;
             slot = (index * 32) + slot;
 
             storage = InventoryManager.Instance.HouseStorage;
+        }
+
+        [HarmonyPatch(typeof(UIRequiredItemSelectPage), "SetShortCutFocus")]
+        [HarmonyPostfix]
+        private static void PatchItemSelectFocus(UIRequiredItemSelectPage __instance)
+        {
+            var detail = __instance.curDetail;
+            if (detail == null) return;
+            if (detail.IsSelectionCompletedAllRequiredItem()) return;
+
+            var pageNumber = __instance.SelectedParcelIndex;
+            var newPageNumber = CraftingHelper.FindNextItemPage(__instance, __instance.SelectedParcelIndex);
+            if (pageNumber == newPageNumber || newPageNumber == -1) return;
+            
+            __instance.SelectedParcelIndex = newPageNumber;
+            __instance.bagGroup.pageMarkList.PageChange(newPageNumber);
+            __instance.bagGroup.parentPage.OnRefresh();
+            // __instance.bagGroup.SetFocus(slot.slot);
         }
 
         /*
@@ -562,8 +549,7 @@ public class CraftFromStorage : BasePlugin
          * This patch adds the logic and animation + music for tab switching
          */
         [HarmonyPatch(typeof(BaseInputManager<InputManager>))]
-        [HarmonyPatch("ReserveInput",
-            new Type[] {typeof(InputSource), typeof(InputKeyBind.InputActionSet), typeof(GamePadButton)})]
+        [HarmonyPatch("ReserveInput", typeof(InputSource), typeof(InputKeyBind.InputActionSet), typeof(GamePadButton))]
         [HarmonyPostfix]
         public static void PatchTabButtons(BaseInputManager<InputManager> __instance,
             InputKeyBind.InputActionSet actionSet, GamePadButton gamePadButton)
@@ -634,7 +620,7 @@ public class CraftFromStorage : BasePlugin
 
             if (__instance.pageMarkList != null)
             {
-                __instance.pageMarkList.Setup(MaxPageAmount(), false, false);
+                __instance.pageMarkList.Setup(MaxPageAmount(), false);
                 __instance.pageMarkList.PageChange(0);
                 return;
             }
@@ -663,7 +649,7 @@ public class CraftFromStorage : BasePlugin
             clone.transform.SetParent(__instance.transform, false);
 
             __instance.pageMarkList = clone;
-            __instance.pageMarkList.Setup(MaxPageAmount(), true, false);
+            __instance.pageMarkList.Setup(MaxPageAmount(), true);
             __instance.pageMarkList.PageChange(0);
             __instance.pageMarkList.SetName("UIStoragePageMarkList");
 
@@ -691,12 +677,11 @@ public class CraftFromStorage : BasePlugin
         [HarmonyPatch(typeof(UIRequiredItemSelectPage), "GetGroupDataList")]
         [HarmonyPostfix]
         private static void PatchRequiredItemSelectPage(UIRequiredItemSelectPage __instance, StorageType storageType,
-            ref Il2CppSystem.Collections.Generic.List<ItemIconData> __result)
+            ref List<ItemIconData> __result)
         {
             var pageCount = __instance.SelectedParcelIndex;
 
             ItemDataListOverride(__result, pageCount, __instance);
-            //TODO: see about moving tabs to the correct item for easier user experience
             for (var i = 0; i < __result.Count; i++)
             {
                 if (__result._items[i].Data.IsBlank) continue;
@@ -716,7 +701,7 @@ public class CraftFromStorage : BasePlugin
     /*
      * ItemDataListOverride - Takes the IconDataList and replaces it one by one with items from either bag or storage
      */
-    private static void ItemDataListOverride(Il2CppSystem.Collections.Generic.List<ItemIconData> itemList,
+    private static void ItemDataListOverride(List<ItemIconData> itemList,
         int pageNumber, UIRequiredItemSelectPage itemSelectPage)
     {
         var isBag = pageNumber == 0;
@@ -798,7 +783,7 @@ public class CraftFromStorage : BasePlugin
 
         if (!canSelect)
         {
-            originalItem.errorIds ??= new Il2CppSystem.Collections.Generic.List<StateErrorTextId>();
+            originalItem.errorIds ??= new List<StateErrorTextId>();
             if (!originalItem.errorIds.Contains(StateErrorTextId.StateError_1030))
                 originalItem.errorIds.Add(StateErrorTextId.StateError_1030);
         }
