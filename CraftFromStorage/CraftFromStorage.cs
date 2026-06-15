@@ -144,7 +144,8 @@ public class CraftFromStorage : BasePlugin
                 recipeDataId = recipe.Id,
                 craftCnt = count,
                 qualityValue = qualityValue,
-                materialList = new List<ItemData>()
+                materialList = new List<ItemData>(),
+                StartTimeTicks = DateManager.Instance.Now.Ticks
             };
 
 
