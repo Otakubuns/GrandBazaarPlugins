@@ -29,6 +29,9 @@
         <Reference Include="Il2Cppmscorlib">
             <HintPath>..\..\library\Il2Cppmscorlib.dll</HintPath>
         </Reference>
+        <Reference Include="Il2CppSystem">
+          <HintPath>..\..\library\Il2CppSystem.dll</HintPath>
+        </Reference>
         <Reference Include="Unity.TextMeshPro">
             <HintPath>..\..\library\Unity.TextMeshPro.dll</HintPath>
         </Reference>

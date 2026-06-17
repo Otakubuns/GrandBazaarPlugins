@@ -17,14 +17,13 @@ public static class CraftingHelper
     /// </summary>
     /// <param name="itemMasterData">The recipe to check, which holds ingredient information only.</param>
     /// <returns>Returns true if the recipe can be crafted using the available items in storage and bag.</returns>
-    public static bool IsCraftable(IRequiredItemMasterData itemMasterData)
+    public static bool IsCraftable(IRequiredItemMasterData itemMasterData, HouseStorageManager houseClone, BagItemStorageManager bagClone)
     {
         var masterDataManager = MasterDataManager.Instance;
         if (masterDataManager == null) return false;
-
-        var bagClone = BagItemStorageManager.Clone(InventoryManager.Instance.BagItemStorage);
-        var houseClone = CloneHouseStorage(InventoryManager.Instance.HouseStorage);
         if (bagClone == null || houseClone == null) return false;
+        
+        var storages = new StorageManager[] { bagClone, houseClone };
 
         for (var i = 0; i < itemMasterData.RequiredItemCount; i++)
         {
@@ -48,14 +47,17 @@ public static class CraftingHelper
                     {
                         // fertilizer: any corrupted(rotten) item counts
                         var rottenRemainder = stack;
-                        foreach (var storage in new StorageManager[] {bagClone, houseClone})
+                        foreach (var storage in storages)
                         {
-                            for (var slot = 0; slot < storage.ItemDatas.Length && rottenRemainder > 0; slot++)
+                            var items = storage.ItemDatas;
+                            for (var slot = 0; slot < items.Length && rottenRemainder > 0; slot++)
                             {
-                                var item = storage.ItemDatas[slot];
-                                if (item == null || !item.IsCorruption) continue;
+                                var item = items[slot];
+                                if (item.IsBlank || !item.IsCorruption) continue;
                                 StorageTryUse(storage, slot, rottenRemainder, out rottenRemainder);
                             }
+
+                            if (rottenRemainder <= 0) break;
                         }
 
                         if (rottenRemainder > 0) return false;
@@ -90,16 +92,18 @@ public static class CraftingHelper
                 case RequiredItemType.Category:
                     // I dont think i've come across category being used but here just in case
                     var categoryRemaining = stack;
-                    foreach (var storage in new StorageManager[] {bagClone, houseClone})
+                    foreach (var storage in storages)
                     {
-                        for (var slot = 0; slot < storage.ItemDatas.Length && categoryRemaining > 0; slot++)
+                        var items = storage.ItemDatas;
+                        for (var slot = 0; slot < items.Length && categoryRemaining > 0; slot++)
                         {
-                            var item = storage.ItemDatas[slot];
-                            if (item == null) continue;
+                            var item = items[slot];
+                            if (item.IsBlank) continue;
                             if (item.Category != (short) itemId) continue;
                             if (!item.IsConditions(item.ItemId, quality, freshness)) continue;
                             StorageTryUse(storage, slot, categoryRemaining, out categoryRemaining);
                         }
+                        if (categoryRemaining <= 0) break;
                     }
 
                     if (categoryRemaining > 0) return false;
@@ -112,31 +116,36 @@ public static class CraftingHelper
                     {
                         if (requiredItem == 0 || groupRemaining <= 0) break;
 
-                        foreach (var storage in new StorageManager[] {bagClone, houseClone})
+                        foreach (var storage in storages)
                         {
-                            for (var slot = 0; slot < storage.ItemDatas.Length && groupRemaining > 0; slot++)
+                            var items = storage.ItemDatas;
+                            for (var slot = 0; slot < items.Length && groupRemaining > 0; slot++)
                             {
-                                var item = storage.ItemDatas[slot];
-                                if (item == null || item.ItemId != requiredItem) continue;
+                                var item = items[slot];
+                                if (item.IsBlank || item.ItemId != requiredItem) continue;
                                 if (!item.IsConditions(item.ItemId, quality, freshness)) continue;
                                 StorageTryUse(storage, slot, groupRemaining, out groupRemaining);
                             }
+
+                            if (groupRemaining <= 0) break;
                         }
 
-                        if (groupRemaining > 0)
+                        if (groupRemaining <= 0) continue;
                         {
                             var variantId = GetVariantId(requiredItem);
-                            if (variantId != 0)
-                                foreach (var storage in new StorageManager[] {bagClone, houseClone})
+                            if (variantId == 0) continue;
+                            foreach (var storage in storages)
+                            {
+                                var items = storage.ItemDatas;
+                                for (var slot = 0; slot < items.Length && groupRemaining > 0; slot++)
                                 {
-                                    for (var slot = 0; slot < storage.ItemDatas.Length && groupRemaining > 0; slot++)
-                                    {
-                                        var item = storage.ItemDatas[slot];
-                                        if (item == null || item.ItemId != variantId) continue;
-                                        if (!item.IsConditions(item.ItemId, quality, freshness)) continue;
-                                        StorageTryUse(storage, slot, groupRemaining, out groupRemaining);
-                                    }
+                                    var item = items[slot];
+                                    if (item.IsBlank || item.ItemId != variantId) continue;
+                                    if (!item.IsConditions(item.ItemId, quality, freshness)) continue;
+                                    StorageTryUse(storage, slot, groupRemaining, out groupRemaining);
                                 }
+                                if (groupRemaining <= 0) break;
+                            }
                         }
                     }
 
@@ -255,7 +264,7 @@ public static class CraftingHelper
         if (slot < 0 || slot >= items.Length) return false;
 
         var targetItem = items[slot];
-        if (targetItem == null) return false;
+        if (targetItem == null || targetItem.IsBlank) return false;
 
         return targetItem.Reduce(stack, out remaining);
     }
@@ -418,7 +427,7 @@ public static class CraftingHelper
         if (items == null) return 0;
         foreach (var item in items)
         {
-            if (item == null) continue;
+            if (item == null || item.IsBlank) continue;
             if (useConditions ? item.IsConditions(data.ItemId, data.Quality, data.FreshnessValue) : item.IsMatch(data))
                 total += item.Stack;
         }

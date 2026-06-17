@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using System.Linq;
 using BepInEx;
 using BepInEx.Logging;
@@ -31,6 +32,9 @@ public class CraftFromStorage : BasePlugin
 
     private class CraftingPatch
     {
+        private static HouseStorageManager _clonedHouseManager;
+        private static BagItemStorageManager _clonedBagItemManager;
+        
         /*
          * This patch patches the Cooking functions b__6, part of the coroutine of Cooking. This adds house storage handling
          */
@@ -58,7 +62,7 @@ public class CraftFromStorage : BasePlugin
 
             var bagStorage = InventoryManager.Instance.BagItemStorage;
             var houseStorage = InventoryManager.Instance.HouseStorage;
-            
+
             foreach (var itemData in useItemList)
             {
                 if (itemData == null) continue;
@@ -76,7 +80,8 @@ public class CraftFromStorage : BasePlugin
                 }
                 else
                 {
-                    var satisfied = CraftingHelper.StorageTryUse(houseStorage, itemData.Slot, required, out var leftover);
+                    var satisfied =
+                        CraftingHelper.StorageTryUse(houseStorage, itemData.Slot, required, out var leftover);
                     if (satisfied) continue;
                     item.Stack = leftover;
                     bagStorage.Use(item);
@@ -331,18 +336,41 @@ public class CraftFromStorage : BasePlugin
             CraftingUI.AddStorageStackBg(requiredItemSelector.requiredItemIcon);
         }
 
-        //Freshness value 0 = rotten
+        /**
+         * This patch just sets the housestorage and bagstorage, so they're not being cloned each recipe(saving time)
+         */
+        [HarmonyPatch(typeof(UIWindmillCraftingPage), "RecipeDataList")]
+        [HarmonyPrefix]
+        public static void CraftingStorageSetup()
+        {
+            _clonedBagItemManager = BagItemStorageManager.Clone(InventoryManager.Instance.BagItemStorage);
+            _clonedHouseManager = CraftingHelper.CloneHouseStorage(InventoryManager.Instance.HouseStorage);
+        }
+
+        /**
+         * This patch just sets the housestorage and bagstorage, so they're not being cloned each recipe(saving time)
+         */
+        [HarmonyPatch(typeof(UICookingPage), "RecipeDataList")]
+        [HarmonyPrefix]
+        public static void CookingStorageSetup()
+        {
+            _clonedBagItemManager = BagItemStorageManager.Clone(InventoryManager.Instance.BagItemStorage);
+            _clonedHouseManager = CraftingHelper.CloneHouseStorage(InventoryManager.Instance.HouseStorage);
+        }
+
         /*
          * This patch makes the recipe icons to be craftable if the items are in storage
          */
         [HarmonyPatch(typeof(RequiredItemMaster), "IsEnough")]
-        [HarmonyPostfix]
-        public static void PatchRecipeMask(StorageManager __0, IRequiredItemMasterData recipe, int countOffset,
+        [HarmonyPrefix]
+        public static bool PatchIsEnough(StorageManager __0, IRequiredItemMasterData recipe, int countOffset,
             ref bool __result)
         {
-            if (__result) return; // if already true no real need to check
-
-            __result = CraftingHelper.IsCraftable(recipe);
+            if (UIAccessor.Instance.CurrentUIKey != UILoadKey.WindmillCrafting &&
+                UIAccessor.Instance.CurrentUIKey != UILoadKey.Cooking) return true;
+            // if (__result) return; // if already true no real need
+            __result = CraftingHelper.IsCraftable(recipe, _clonedHouseManager, _clonedBagItemManager);
+            return false;
         }
 
         /*
@@ -361,7 +389,7 @@ public class CraftFromStorage : BasePlugin
             if (requiredItemSelector == null) return;
 
             var houseClone = CraftingHelper.CloneHouseStorage(InventoryManager.Instance.HouseStorage);
-            
+
             for (var i = 0; i < requiredItemSelector.requiredItemIcon._size; i++)
             {
                 LocalizedTextMeshPro textMesh;
@@ -397,7 +425,7 @@ public class CraftFromStorage : BasePlugin
 
                 // Helper functiom that countsd and also consumes from cloned houseStorage
                 var storageAmount = CraftingHelper.CountAndConsumeFromStorage(houseClone, requiredItem);
-                
+
                 if (storageAmount >= stack)
                     requiredItemSelector.requiredItemIcon._items[i].checkIcon.enabled = true;
 
@@ -412,11 +440,13 @@ public class CraftFromStorage : BasePlugin
             }
         }
 
+
         /*
          * This patch updates the text for the selected item to show the amount in storage too(in vanilla it counts all items by id too)
          */
         [HarmonyPatch(typeof(UIRequiredItemIcon))]
-        [HarmonyPatch("Setup", typeof(BagItemStorageManager), typeof(RequiredItemData), typeof(int), typeof(UIRequiredItemIcon.State))]
+        [HarmonyPatch("Setup", typeof(BagItemStorageManager), typeof(RequiredItemData), typeof(int),
+            typeof(UIRequiredItemIcon.State))]
         [HarmonyPostfix]
         private static void PatchIconSetup(UIRequiredItemIcon __instance, BagItemStorageManager cloneBagMgr,
             RequiredItemData requiredItemData, int quality, UIRequiredItemIcon.State state)
@@ -432,7 +462,7 @@ public class CraftFromStorage : BasePlugin
                                                                     selectedItem.Quality,
                                                                     selectedItem.Freshness));
             }
-            
+
             __instance.havedStackText.SetCount(count);
         }
 
@@ -485,6 +515,9 @@ public class CraftFromStorage : BasePlugin
             storage = InventoryManager.Instance.HouseStorage;
         }
 
+        /**
+         * This patch moves to the next page where the next available item is
+         */
         [HarmonyPatch(typeof(UIRequiredItemSelectPage), "SetShortCutFocus")]
         [HarmonyPostfix]
         private static void PatchItemSelectFocus(UIRequiredItemSelectPage __instance)
@@ -496,7 +529,7 @@ public class CraftFromStorage : BasePlugin
             var pageNumber = __instance.SelectedParcelIndex;
             var newPageNumber = CraftingHelper.FindNextItemPage(__instance, __instance.SelectedParcelIndex);
             if (pageNumber == newPageNumber || newPageNumber == -1) return;
-            
+
             __instance.SelectedParcelIndex = newPageNumber;
             __instance.bagGroup.pageMarkList.PageChange(newPageNumber);
             __instance.bagGroup.parentPage.OnRefresh();
