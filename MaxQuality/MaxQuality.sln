@@ -1,0 +1,16 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MaxQuality", "MaxQuality.csproj", "{F5B5D726-396B-4887-939C-611BFB78E85A}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{F5B5D726-396B-4887-939C-611BFB78E85A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F5B5D726-396B-4887-939C-611BFB78E85A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F5B5D726-396B-4887-939C-611BFB78E85A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F5B5D726-396B-4887-939C-611BFB78E85A}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
