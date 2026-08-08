@@ -34,7 +34,7 @@ public class CraftFromStorage : BasePlugin
     {
         private static HouseStorageManager _clonedHouseManager;
         private static BagItemStorageManager _clonedBagItemManager;
-        
+
         /*
          * This patch patches the Cooking functions b__6, part of the coroutine of Cooking. This adds house storage handling
          */
@@ -368,7 +368,7 @@ public class CraftFromStorage : BasePlugin
         {
             if (UIAccessor.Instance.CurrentUIKey != UILoadKey.WindmillCrafting &&
                 UIAccessor.Instance.CurrentUIKey != UILoadKey.Cooking) return true;
-            // if (__result) return; // if already true no real need
+            if (__result) return true; // if already true no real need
             __result = CraftingHelper.IsCraftable(recipe, _clonedHouseManager, _clonedBagItemManager);
             return false;
         }
@@ -389,6 +389,8 @@ public class CraftFromStorage : BasePlugin
             if (requiredItemSelector == null) return;
 
             var houseClone = CraftingHelper.CloneHouseStorage(InventoryManager.Instance.HouseStorage);
+            var houseDisplayClone = CraftingHelper.CloneHouseStorage(InventoryManager.Instance.HouseStorage);
+            var bagClone = BagItemStorageManager.Clone(InventoryManager.Instance.BagItemStorage);
 
             for (var i = 0; i < requiredItemSelector.requiredItemIcon._size; i++)
             {
@@ -424,19 +426,25 @@ public class CraftFromStorage : BasePlugin
                 }
 
                 // Helper functiom that countsd and also consumes from cloned houseStorage
-                var storageAmount = CraftingHelper.CountAndConsumeFromStorage(houseClone, requiredItem);
+                var bagAmount = CraftingHelper.CountAndConsumeFromStorage(bagClone, requiredItem);
+                var storageAmountCalc = bagAmount >= stack
+                    ? CraftingHelper.GetHouseStack(houseClone, requiredItem)
+                    : CraftingHelper.CountAndConsumeFromStorage(houseClone, requiredItem);
 
-                if (storageAmount >= stack)
+                var total = bagAmount + storageAmountCalc;
+                if (total >= stack)
                     requiredItemSelector.requiredItemIcon._items[i].checkIcon.enabled = true;
+                
+                // This is for the display, since im replicating vanilla look, if the amount shows 0 then the icon wouldn't be enabled
+                var storageAmountDisplay = CraftingHelper.CountAndConsumeFromStorage(houseDisplayClone, requiredItem);
 
                 // if amount is over 999 just show 999+ to prevent it from looking cramped
-                if (storageAmount > 999)
+                if (storageAmountDisplay > 999)
                 {
                     textMesh.SetText("999+");
                     continue;
                 }
-
-                textMesh.SetCount(storageAmount);
+                textMesh.SetCount(storageAmountDisplay);
             }
         }
 
@@ -457,31 +465,10 @@ public class CraftFromStorage : BasePlugin
             var count = 0;
             foreach (var selectedItem in requiredItemData.SelectedItems)
             {
-                count += CraftingHelper.CountInAllStorages(x => x != null &&
-                                                                x.IsConditions(selectedItem.ItemId,
-                                                                    selectedItem.Quality,
-                                                                    selectedItem.Freshness));
+                count += CraftingHelper.CountInAllStorages(selectedItem.ItemId, selectedItem.Quality, selectedItem.Freshness);
             }
 
             __instance.havedStackText.SetCount(count);
-        }
-
-
-        /*
-         * This patches when the crafting amount ui pops up to not pop up if there are arrange ingredients
-         */
-        [HarmonyPatch(typeof(UIRequiredItemSelectPage), "SetShortCutFocus")]
-        [HarmonyPrefix]
-        private static bool PatchAdaptRecipeSelection(UIRequiredItemSelectPage __instance)
-        {
-            var detail = __instance.curDetail;
-            if (detail == null)
-                return true;
-
-            if (!detail.IsSelectionCompletedRequiredItem() ||
-                __instance.shortCutCursorIndex >= 0) return true;
-
-            return CraftingHelper.HaveAdaptItemsInStorage(__instance.curDetail.requiredItemSelector.requiredItems);
         }
 
         /*
@@ -513,6 +500,35 @@ public class CraftFromStorage : BasePlugin
             slot = (index * 32) + slot;
 
             storage = InventoryManager.Instance.HouseStorage;
+        }
+
+        /*
+         * This patches when the crafting amount ui pops up to not pop up if there are arrange ingredients
+         */
+        [HarmonyPatch(typeof(UIRequiredItemSelectPage), "SetShortCutFocus")]
+        [HarmonyPrefix]
+        private static bool PatchAdaptRecipeSelection(UIRequiredItemSelectPage __instance)
+        {
+            var detail = __instance.curDetail;
+            if (detail == null) return true;
+
+            if (detail.IsSelectionCompletedAllRequiredItem())
+                return true;
+
+            if (!detail.IsSelectionCompletedRequiredItem() || __instance.shortCutCursorIndex >= 0)
+                return true;
+
+            if (CraftingHelper.HaveAdaptItemsInStorage(detail.requiredItemSelector.requiredItems))
+                return true;
+
+            var bagGroup = __instance.bagGroup;
+            if (bagGroup == null) return false;
+
+            bagGroup.SetFocus(__instance.shortCutCursorIndex);
+            bagGroup.ForceFocusIn();
+            bagGroup.UpdateFocus();
+
+            return false;
         }
 
         /**
@@ -761,6 +777,15 @@ public class CraftFromStorage : BasePlugin
             for (var i = index; i < (index + 32); i++)
             {
                 var item = itemList._items[originalIndex];
+
+                //Storage only allocates 24 slots per parcel, but pages are 32 wide,
+                //this is what was causing the out of range error, so if the index is over the storage amount it will just show a lock icon
+                if (i >= houseStorage.CurrentCapacity)
+                {
+                    item.state = IconData.State.LockItem;
+                    originalIndex++;
+                    continue;
+                }
 
                 var sourceItem = houseStorage.itemDatas[i];
 
