@@ -20,6 +20,7 @@ public static class CraftingHelper
     public static bool IsCraftable(IRequiredItemMasterData itemMasterData, HouseStorageManager houseClone,
         BagItemStorageManager bagClone)
     {
+        _usedSlots.Clear();
         var masterDataManager = MasterDataManager.Instance;
         if (masterDataManager == null) return false;
         if (bagClone == null || houseClone == null) return false;
@@ -290,7 +291,7 @@ public static class CraftingHelper
         var key = (storage, slot);
         if (!_usedSlots.ContainsKey(key))
             _usedSlots[key] = ItemData.Clone(targetItem);
-
+        
         return targetItem.Reduce(stack, out remaining);
     }
 

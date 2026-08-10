@@ -182,32 +182,32 @@ public class CraftFromStorage : BasePlugin
                 foreach (var slotItem in useItemList)
                 {
                     if (slotItem == null || slotItem.IsTool) continue;
-
+                    
                     var required = (count - 1) * slotItem.Stack;
                     if (required <= 0) continue;
+
 
                     var data = Clone(slotItem);
                     data.Stack = required;
 
                     if (slotItem.Storage is BagItemStorageManager)
                     {
-                        if (!bag.TryUse(slotItem.Slot, required, out var leftover))
-                        {
-                            data.Stack = leftover;
-                            bag.Use(data);
-                            if (data.Stack > 0)
-                                CraftingHelper.UseStorage(data, houseStorage);
-                        }
+                        if (bag.TryUse(slotItem.Slot, required, out var leftover)) continue;
+                        
+                        data.Stack = leftover;
+                        bag.Use(data);
+                        if (data.Stack > 0)
+                            CraftingHelper.UseStorage(data, houseStorage);
                     }
                     else
                     {
-                        if (!CraftingHelper.StorageTryUse(houseStorage, slotItem.Slot, required, out var leftover))
-                        {
-                            data.Stack = leftover;
-                            CraftingHelper.UseStorage(data, houseStorage);
-                            if (data.Stack > 0)
-                                bag.Use(data);
-                        }
+                        if (CraftingHelper.StorageTryUse(houseStorage, slotItem.Slot, required, out var leftover))
+                            continue;
+                        
+                        data.Stack = leftover;
+                        CraftingHelper.UseStorage(data, houseStorage);
+                        if (data.Stack > 0)
+                            bag.Use(data);
                     }
                 }
             }
