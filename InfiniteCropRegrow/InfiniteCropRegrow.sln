@@ -1,0 +1,16 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "InfiniteCropRegrow", "InfiniteCropRegrow.csproj", "{FFA37CE8-FA58-4A66-ADB6-44E8BEF21AEF}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{FFA37CE8-FA58-4A66-ADB6-44E8BEF21AEF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FFA37CE8-FA58-4A66-ADB6-44E8BEF21AEF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FFA37CE8-FA58-4A66-ADB6-44E8BEF21AEF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FFA37CE8-FA58-4A66-ADB6-44E8BEF21AEF}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
